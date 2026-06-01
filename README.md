@@ -67,3 +67,9 @@ drake_ik_benchmark/
 * SNOPT, IPOPT, and NLopt are local methods on a non-convex problem; results are conditioned on the fixed initial guess and do not establish global superiority.
 
 * Tolerances are pinned for fairness, so the benchmark measures normalized behavior rather than out-of-the-box defaults.
+
+## CONFIG TODOs: 
+
+* `pyproject.toml`: check drake version on all machines and pin
+
+* `configs/default.yaml`: sampling parameters + add mindistlb
