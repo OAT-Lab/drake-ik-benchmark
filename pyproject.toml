@@ -1,0 +1,30 @@
+[project]
+name = "drake-ik-benchmark"
+version = "0.0.1"
+description = "A controlled benchmark of Drake's nonlinear solvers on iiwa7 + WSG inverse kinematics."
+readme = "README.md"
+# 3.13 is the common floor that installs via pip on every target platform:
+# macOS arm64 (>=3.13), Ubuntu 24.04 x86_64 (3.12-3.14), Amazon Linux 2023 (3.12-3.14).
+requires-python = ">=3.13"
+
+dependencies = [
+    # TODO: check drake version on all machines
+    # "drake==1.XX.0"
+
+    # others ~=: stable behavior, each platform resolves to an installable wheel
+    # do not affect ik results
+    "numpy~=2.1",
+    "pandas~=2.2",
+    "pyarrow~=18.0",   # parquet output
+    "pyyaml~=6.0",     # config loading
+]
+
+[project.optional-dependencies]
+dev = ["pytest~=8.0"]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

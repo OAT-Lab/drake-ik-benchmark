@@ -1,0 +1,42 @@
+# Default benchmark configuration
+
+# a run is fully described by this file + the pinned Drake version (see pyproject.toml).
+# nothing that affects results should live in code instead of here.
+
+# REPRODUCIBILITY
+base_seed: 42            # master RNG seed
+
+# SCENARIO SET
+n: 100                   # total number of scenarios
+method_mix:              # fraction of scenarios per generation method (must sum to 1.0)
+  joint_space: 0.5       # sample a random q, forward-kinematics to a reachable target
+  task_space: 0.5        # sample a pose directly in the workspace (might be unreachable)
+
+# Task-space sampling parameters.
+# TODO: design these together. Placeholders not final.
+#   - the workspace box that target positions are drawn from (xyz min/max)
+#   - how orientations are sampled
+task_space:
+  position_min: [0, 0, 0]
+  position_max: [0, 0, 0]
+  orientation_sampling: "<3"
+
+# CONSTRAINTS
+orientation_tol: 0.0     # radians, 0.0 = exact orientation
+
+# SOLVER FAIRNESS
+#   - shared tolerances mapped onto every solver's option keys (see solvers.py)
+#   - pinned for fairness: not defaults
+tolerances:
+  feasibility_tol: 1.0e-6
+  optimality_tol: 1.0e-6
+  major_iter_limit: 1000
+
+# MEASUREMENT
+# solver-blind feasibility threshold used by measure.py
+# separate from the solver tolerances above.
+feasibility_threshold: 1.0e-4
+
+# TIMING
+n_warmup: 1              # leading solves discarded per (scenario, solver)
+n_repeats: 5             # timed solves averaged over
