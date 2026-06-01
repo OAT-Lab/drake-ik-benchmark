@@ -13,7 +13,7 @@ method_mix:              # fraction of scenarios per generation method (must sum
   task_space: 0.5        # sample a pose directly in the workspace (might be unreachable)
 
 # Task-space sampling parameters.
-# TODO: design these together. Placeholders not final.
+# TODO: design these together. placeholders not final
 #   - the workspace box that target positions are drawn from (xyz min/max)
 #   - how orientations are sampled
 task_space:
