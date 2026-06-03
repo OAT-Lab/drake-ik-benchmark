@@ -74,7 +74,7 @@ def _sample_task_space(rng, position_min, position_max, cone_half_angle_rad):
 
 def generate_scenarios(
     plant, plant_context, gripper_frame, q0,
-    n, base_seed, method_mix, task_space_params,
+    n: int, base_seed: int, method_mix: dict[str, float], task_space_params: dict,
 ):
     """produce list of Scenario objects
 
@@ -97,6 +97,10 @@ def generate_scenarios(
     list[Scenario]
         Same base_seed always yields the identical list.
     """
+    
+    expected_keys = {"joint_space", "task_space"}
+    if set(method_mix) != expected_keys:
+        raise ValueError(f"method_mix keys must be {expected_keys}, got {set(method_mix)}")
     if abs(sum(method_mix.values()) - 1.0) > 1e-9:
         raise ValueError(f"method_mix must sum to 1.0, got {sum(method_mix.values())}")
 
