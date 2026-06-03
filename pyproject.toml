@@ -13,7 +13,7 @@ dependencies = [
     # do not affect ik results
     "numpy~=2.1",
     "pandas~=2.2",
-    "pyarrow~=18.0",   # parquet output
+    #"pyarrow~=18.0",   # TODO: fix import (parquet output)
     "pyyaml~=6.0",     # config loading
 ]
 
