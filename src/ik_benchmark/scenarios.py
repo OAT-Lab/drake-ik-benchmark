@@ -97,11 +97,11 @@ def generate_scenarios(
     list[Scenario]
         Same base_seed always yields the identical list.
     """
-    
+    # check params
     expected_keys = {"joint_space", "task_space"}
-    if set(method_mix) != expected_keys:
+    if set(method_mix) != expected_keys:                                                    # checks method_mix keys
         raise ValueError(f"method_mix keys must be {expected_keys}, got {set(method_mix)}")
-    if abs(sum(method_mix.values()) - 1.0) > 1e-9:
+    if abs(sum(method_mix.values()) - 1.0) > 1e-9:                                          # check mix sums to 1
         raise ValueError(f"method_mix must sum to 1.0, got {sum(method_mix.values())}")
 
     lower = plant.GetPositionLowerLimits()
