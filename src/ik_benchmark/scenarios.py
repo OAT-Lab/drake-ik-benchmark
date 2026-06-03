@@ -28,7 +28,7 @@ class Scenario:
     target_orientation: np.ndarray       # (3, 3) R_WG
     q0: np.ndarray                        # (nq,) nominal posture: cost ref + initial guess
     generation_method: str               # "joint_space" | "task_space"
-    seed: int
+    seed: tuple
 
 
 def _assert_finite_limits(lower, upper):
@@ -111,10 +111,12 @@ def generate_scenarios(
     pos_max = np.asarray(task_space_params["position_max"], dtype=float)
     cone = float(task_space_params["cone_half_angle_rad"])
 
+    seed_seq = np.random.SeedSequence(base_seed) # generates n random seeds from base seed
+    children = seed_seq.spawn(n)
+
     scenarios = []
     for i, method in enumerate(methods):
-        scenario_seed = base_seed + i
-        rng = np.random.default_rng(scenario_seed)
+        rng = np.random.default_rng(children[i])
         if method == "joint_space":
             position, orientation = _sample_joint_space(
                 plant, plant_context, gripper_frame, lower, upper, rng
@@ -128,7 +130,8 @@ def generate_scenarios(
             target_orientation=orientation,
             q0=np.asarray(q0, dtype=float).copy(),
             generation_method=method,
-            seed=scenario_seed,
+            seed=(base_seed, i),
         ))
 
+    plant.SetPositions(plant_context, q0) # set plant back to nominal pos
     return scenarios
