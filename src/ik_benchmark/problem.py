@@ -48,8 +48,10 @@ def build_ik_prog(
     """
     if use_minimum_distance: 
         if min_distance_bound >= influence_distance_offset: 
-            raise ValueError(f"minimum distance lower bound constraint requires min_distance_bound < influence_distance_offset." 
-                        "\ngot min_dist_bound: {min_distance_bound}, influence_distance_offset: {influence_distance_offset}")
+            raise ValueError(
+                f"minimum distance lower bound constraint requires min_distance_bound < influence_distance_offset." 
+                f"\ngot min_dist_bound: {min_distance_bound}, influence_distance_offset: {influence_distance_offset}")
+    
     ik = InverseKinematics(plant, plant_context)
     q = ik.q()
 
