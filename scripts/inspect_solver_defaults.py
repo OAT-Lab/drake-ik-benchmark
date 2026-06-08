@@ -52,6 +52,8 @@ def _verbose_options(solver_name, print_file):
     if solver_name == "IPOPT":
         opts.SetOption("IPOPT", "print_level", 12)
         opts.SetOption("IPOPT", "print_user_options", "yes")
+        opts.SetOption("IPOPT", "print_advanced_options", "yes")
+        opts.SetOption("IPOPT", "print_options_documentation", "yes")
     # SNOPT writes its parameter summary to the print file (kPrintFileName).
     # NLopt does not self-report; defaults inferred from docs + nlopt_solver.cc.
     return opts
@@ -106,8 +108,7 @@ def main():
     for solver_id in solver_ids:
         _inspect_one(solver_id, prog, scenario.q0)
 
-    print(f"Dumps written under {OUT_DIR}/. Read each solver's print/console file "
-          f"for the parameters it engaged and their values.")
+    print(f"Dumps written under {OUT_DIR}/.")
 
 
 if __name__ == "__main__":
