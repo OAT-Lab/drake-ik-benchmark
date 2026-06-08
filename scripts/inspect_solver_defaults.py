@@ -30,7 +30,7 @@ from pydrake.solvers import (
 from ik_benchmark.plant import build_plant
 from ik_benchmark.scenarios import generate_scenarios
 from ik_benchmark.problem import build_ik_prog
-
+from pydrake.solvers import NloptSolver
 
 OUT_DIR = Path("results/solver_defaults")
 
@@ -43,6 +43,23 @@ _TASK_SPACE = {
     "cone_half_angle_rad": 0.5,
 }
 
+# Algorithms one might naively consider; only SLSQP handles nonlinear equality constraints.
+_NLOPT_ALGOS = ["LD_SLSQP", "LD_MMA", "LD_LBFGS", "LN_COBYLA", "LD_CCSAQ"]
+
+def _probe_nlopt_algorithms(prog, q0, print_dir):
+    for algo in _NLOPT_ALGOS:
+        opts = SolverOptions()
+        opts.SetOption(NloptSolver.id(), NloptSolver.AlgorithmName(), algo)
+        opts.SetOption(NloptSolver.id(), NloptSolver.MaxEvalName(), 2000)  # never hang
+        solver = NloptSolver()
+        try:
+            result = solver.Solve(prog, q0, opts)
+            ok = result.is_success()
+            # solver-blind feasibility check matters here: success flag is unreliable
+            print(f"  {algo:10s}: ran, is_success={ok}, "
+                  f"result={result.get_solution_result()}")
+        except Exception as e:
+            print(f"  {algo:10s}: FAILED -> {type(e).__name__}: {e}")
 
 def _verbose_options(solver_name, print_file):
     """SolverOptions that maximize each solver's self-reporting of its settings."""
@@ -77,6 +94,8 @@ def _inspect_one(solver_id, prog, q0):
     print(f"  success     : {result.is_success()}")
     print(f"  solver used : {result.get_solver_id().name()}")
     print(f"  console dump: {OUT_DIR / f'{name}_console.txt'} ({len(console_dump)} chars)")
+    if name == "NLopt": 
+        _probe_nlopt_algorithms(prog, q0, "results/NLopt_probe.txt")
     if print_file.exists():
         print(f"  print file  : {print_file} ({print_file.stat().st_size} bytes)")
     print()
