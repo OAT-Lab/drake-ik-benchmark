@@ -44,13 +44,15 @@ _TASK_SPACE = {
 }
 
 # Algorithms one might naively consider; only SLSQP handles nonlinear equality constraints.
-_NLOPT_ALGOS = ["LD_SLSQP", "LD_MMA", "LD_LBFGS", "LN_COBYLA", "LD_CCSAQ"]
+_NLOPT_ALGOS = ["GN_ISRES", "LN_COBYLA", "LD_SLSQP"] # yes all of these work enough
 
 def _probe_nlopt_algorithms(prog, q0, print_dir):
     for algo in _NLOPT_ALGOS:
         opts = SolverOptions()
         opts.SetOption(NloptSolver.id(), NloptSolver.AlgorithmName(), algo)
         opts.SetOption(NloptSolver.id(), NloptSolver.MaxEvalName(), 2000)  # never hang
+        opts.SetOption(NloptSolver.id(), NloptSolver.MaxEvalName(), 100000)
+        opts.SetOption(NloptSolver.id(), NloptSolver.MaxTimeName(), 60.0)  # seconds
         solver = NloptSolver()
         try:
             result = solver.Solve(prog, q0, opts)
