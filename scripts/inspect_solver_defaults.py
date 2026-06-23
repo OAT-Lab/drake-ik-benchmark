@@ -3,14 +3,6 @@
 ***not part of the benchmark.
 
 for finding the parameters/defaults used by each solver
-
-Run it once per machine; save the output into the repo as the documented basis
-for the benchmark's "consistent defaults" claim.
-
-Authoritative default references (for interpreting the dumps):
-  SNOPT : SNOPT User's Guide, section 7.7  (web.stanford.edu/group/SOL/guides/sndoc7.pdf)
-  IPOPT : IPOPT Options Reference          (coin-or.github.io/Ipopt/OPTIONS.html)
-  NLOPT : NLopt stopping-criteria section  (nlopt.readthedocs.io)
 """
 
 from __future__ import annotations
