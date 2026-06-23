@@ -51,8 +51,10 @@ _TASK_SPACE = {
 _PRINTFILE_MARKERS = {
     "IPOPT": ["Dual infeasibility", "Constraint violation",
               "Variable bound violation", "Complementarity", "Overall NLP error"],
-    "SNOPT": ["Max Primal infeas", "Max Dual infeas", "INFO", "EXIT"],
+    "SNOPT": ["Max Primal infeas", "Max pi", "Max Dual infeas", "INFO", "EXIT"],
 }
+
+SEEDS = [0, 42]
 
 
 def _binding_label(binding) -> str:
@@ -133,11 +135,11 @@ def _parse_printfile(name, print_file: Path):
                     print(f"    | {line.strip()}")
 
 
-def _inspect_one(solver_id, prog, q0):
+def _inspect_one(solver_id, prog, q0, seed):
     solver = MakeSolver(solver_id)
     name = solver.solver_id().name()
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    print_file = OUT_DIR / f"{name}_optprint.txt"
+    print_file = OUT_DIR / f"{name}_optprint_{seed}.txt"
 
     opts = SolverOptions()
     opts.SetOption(CommonSolverOption.kPrintFileName, str(print_file))
@@ -183,32 +185,33 @@ def _inspect_one(solver_id, prog, q0):
 
 
 def main():
-    plant, plant_context, gripper_frame, q0 = build_plant(_TIME_STEP, _BOX)
+    for seed in SEEDS: 
+        plant, plant_context, gripper_frame, q0 = build_plant(_TIME_STEP, _BOX)
 
-    scenario = generate_scenarios(
-        plant, plant_context, gripper_frame, q0,
-        n=1, base_seed=0,
-        method_mix={"joint_space": 1.0, "task_space": 0.0},
-        task_space_params=_TASK_SPACE,
-    )[0]
+        scenario = generate_scenarios(
+            plant, plant_context, gripper_frame, q0,
+            n=1, base_seed=seed,
+            method_mix={"joint_space": 1.0, "task_space": 0.0},
+            task_space_params=_TASK_SPACE,
+        )[0]
 
-    prog, q = build_ik_prog(
-        plant, plant_context, gripper_frame, scenario,
-        orientation_tol=0.0,
-        use_minimum_distance=True,
-        min_distance_bound=0.001,
-        influence_distance_offset=0.1,
-    )
+        prog, q = build_ik_prog(
+            plant, plant_context, gripper_frame, scenario,
+            orientation_tol=0.0,
+            use_minimum_distance=True,
+            min_distance_bound=0.001,
+            influence_distance_offset=0.1,
+        )
 
-    program_type = GetProgramType(prog)
-    solver_ids = GetAvailableSolvers(program_type)
-    print(f"Program type: {program_type}")
-    print(f"Capable + available solvers: {[sid.name() for sid in solver_ids]}\n")
+        program_type = GetProgramType(prog)
+        solver_ids = GetAvailableSolvers(program_type)
+        print(f"Program type: {program_type}")
+        print(f"Capable + available solvers: {[sid.name() for sid in solver_ids]}\n")
 
-    for solver_id in solver_ids:
-        _inspect_one(solver_id, prog, scenario.q0)
+        for solver_id in solver_ids:
+            _inspect_one(solver_id, prog, scenario.q0, seed)
 
-    print(f"Dumps written under {OUT_DIR}/.")
+        print(f"Dumps written under {OUT_DIR}/.")
 
 
 if __name__ == "__main__":
