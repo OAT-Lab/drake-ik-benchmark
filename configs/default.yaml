@@ -3,6 +3,13 @@
 # a run is fully described by this file + the pinned Drake version (see pyproject.toml).
 # nothing that affects results should live in code instead of here.
 
+# LOGGING
+logging:
+  level: INFO              # CRITICAL, ERROR, WARNING, INFO, DEBUG, or NOTSET
+  file: benchmark.log      # relative paths are written inside the timestamped run dir
+  mode: w                  # w = fresh log per run, a = append
+  quiet: false             # true disables console logs; file logs still write
+
 # REPRODUCIBILITY
 base_seed: 42            # master RNG seed
 

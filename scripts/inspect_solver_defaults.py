@@ -7,7 +7,9 @@ for finding the parameters/defaults used by each solver
 
 from __future__ import annotations
 
+import argparse
 import io
+import logging
 from contextlib import redirect_stdout
 from pathlib import Path
 
@@ -22,9 +24,11 @@ from pydrake.solvers import (
 from ik_benchmark.plant import build_plant
 from ik_benchmark.scenarios import generate_scenarios
 from ik_benchmark.problem import build_ik_prog
+from ik_benchmark.logging import configure_logging
 from pydrake.solvers import NloptSolver
 
 OUT_DIR = Path("results/solver_defaults")
+logger = logging.getLogger("ik_benchmark.scripts.inspect_solver_defaults")
 
 # Minimal inline settings for the throwaway diagnostic (not the full config).
 _TIME_STEP = 0.001
@@ -50,10 +54,14 @@ def _probe_nlopt_algorithms(prog, q0, print_dir):
             result = solver.Solve(prog, q0, opts)
             ok = result.is_success()
             # solver-blind feasibility check matters here: success flag is unreliable
-            print(f"  {algo:10s}: ran, is_success={ok}, "
-                  f"result={result.get_solution_result()}")
+            logger.info(
+                "  %-10s: ran, is_success=%s, result=%s",
+                algo,
+                ok,
+                result.get_solution_result(),
+            )
         except Exception as e:
-            print(f"  {algo:10s}: FAILED -> {type(e).__name__}: {e}")
+            logger.info("  %-10s: FAILED -> %s: %s", algo, type(e).__name__, e)
 
 def _verbose_options(solver_name, print_file):
     """SolverOptions that maximize each solver's self-reporting of its settings."""
@@ -83,18 +91,55 @@ def _inspect_one(solver_id, prog, q0):
     console_dump = buf.getvalue()
     (OUT_DIR / f"{name}_console.txt").write_text(console_dump)
 
-    print(f"--- {name} ---")
-    print(f"  success     : {result.is_success()}")
-    print(f"  solver used : {result.get_solver_id().name()}")
-    print(f"  console dump: {OUT_DIR / f'{name}_console.txt'} ({len(console_dump)} chars)")
+    logger.info("--- %s ---", name)
+    logger.info("  success     : %s", result.is_success())
+    logger.info("  solver used : %s", result.get_solver_id().name())
+    logger.info(
+        "  console dump: %s (%s chars)",
+        OUT_DIR / f"{name}_console.txt",
+        len(console_dump),
+    )
     if name == "NLopt": 
         _probe_nlopt_algorithms(prog, q0, "results/NLopt_probe.txt")
     if print_file.exists():
-        print(f"  print file  : {print_file} ({print_file.stat().st_size} bytes)")
-    print()
+        logger.info("  print file  : %s (%s bytes)", print_file, print_file.stat().st_size)
+    logger.info("")
 
 
 def main():
+    parser = argparse.ArgumentParser(
+        description="Inspect solver parameters/defaults used on the IK problem."
+    )
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        choices=["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET"],
+        help="Minimum ik_benchmark log level.",
+    )
+    parser.add_argument(
+        "--log-file",
+        default=OUT_DIR / "inspect_solver_defaults.log",
+        help="Path for logs.",
+    )
+    parser.add_argument(
+        "--log-mode",
+        default="w",
+        choices=["w", "a"],
+        help="File log mode.",
+    )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Disable console logs. File logs are still written when --log-file is set.",
+    )
+    args = parser.parse_args()
+    configure_logging(
+        level=args.log_level,
+        log_file=args.log_file,
+        mode=args.log_mode,
+        quiet=args.quiet,
+    )
+
     plant, plant_context, gripper_frame, q0 = build_plant(_TIME_STEP, _BOX)
 
     scenario = generate_scenarios(
@@ -114,13 +159,13 @@ def main():
 
     program_type = GetProgramType(prog)
     solver_ids = GetAvailableSolvers(program_type)
-    print(f"Program type: {program_type}")
-    print(f"Capable + available solvers: {[sid.name() for sid in solver_ids]}\n")
+    logger.info("Program type: %s", program_type)
+    logger.info("Capable + available solvers: %s\n", [sid.name() for sid in solver_ids])
 
     for solver_id in solver_ids:
         _inspect_one(solver_id, prog, scenario.q0)
 
-    print(f"Dumps written under {OUT_DIR}/.")
+    logger.info("Dumps written under %s/.", OUT_DIR)
 
 
 if __name__ == "__main__":

@@ -7,7 +7,7 @@ requires-python = ">=3.13" #TODO: lauren's different
 
 dependencies = [
     # TODO: check drake version on all machines
-    "drake==1.50.0"
+    "drake==1.50.0",
 
     # others ~=: stable behavior, each platform resolves to an installable wheel
     # do not affect ik results
@@ -18,7 +18,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest~=8.0"]
+dev = [
+    "pytest~=8.0",
+]
 
 [build-system]
 requires = ["setuptools>=61"]

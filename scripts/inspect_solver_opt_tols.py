@@ -8,7 +8,7 @@ reported optimality measure
     SNOPT: Max Dual infeas
 
 terminal multiplier arrays from solver_details
-    SNOPT: Fmul (general-constraint mults), xmul (variable/bound mults = reduced grads)
+    SNOPT: Fmul (general-constraint mults), xmul (variable/bound mults)
     IPOPT: lambda_val (general), z_L / z_U (bound)
 
 per-binding duals via GetDualSolution
@@ -19,6 +19,8 @@ r = sum_costs grad_f - sum_constraints J_stored^T y
 
 from __future__ import annotations
 
+import argparse
+import logging
 import re
 from pathlib import Path
 
@@ -36,8 +38,10 @@ from pydrake.autodiffutils import InitializeAutoDiff, ExtractGradient
 from ik_benchmark.plant import build_plant
 from ik_benchmark.scenarios import generate_scenarios
 from ik_benchmark.problem import build_ik_prog
+from ik_benchmark.logging import configure_logging
 
 OUT_DIR = Path("results/optimality_inspect")
+logger = logging.getLogger("ik_benchmark.scripts.inspect_solver_opt_tols")
 
 _TIME_STEP = 0.001
 _BOX = {"size": [0.1, 0.1, 1.0], "position": [0.25, 0.0, 0.5]}
@@ -105,7 +109,11 @@ def _dump_solver_details(name, details):
     def show(attr):
         if hasattr(details, attr):
             v = np.atleast_1d(getattr(details, attr))
-            print(f"    {attr:11s}: {np.array2string(np.asarray(v, float), precision=4, max_line_width=120)}")
+            logger.info(
+                "    %-11s: %s",
+                attr,
+                np.array2string(np.asarray(v, float), precision=4, max_line_width=120),
+            )
     if name == "SNOPT":
         for a in ("Fmul", "xmul", "F", "info"):
             show(a)
@@ -117,26 +125,26 @@ def _dump_solver_details(name, details):
 def _parse_printfile(name, print_file: Path):
     """pull the solver's own optimality lines out of its print file."""
     if not print_file.exists():
-        print("    (no print file)")
+        logger.info("    (no print file)")
         return
     text = print_file.read_text(errors="replace")
     markers = _PRINTFILE_MARKERS.get(name, [])
     for line in text.splitlines():
         if any(m in line for m in markers):
-            print(f"    | {line.strip()}")
+            logger.info("    | %s", line.strip())
     # SNOPT also prints a per-variable reduced-gradient listing
     if name == "SNOPT":
         grab = False
         for line in text.splitlines():
             if "Reduced Gradnt" in line:
-                print(f"    | {line.strip()}")
+                logger.info("    | %s", line.strip())
                 grab = True
                 continue
             if grab:
                 if line.strip() == "" :
                     grab = False
                 elif (" LL " in line) or (" UL " in line):
-                    print(f"    | {line.strip()}")
+                    logger.info("    | %s", line.strip())
 
 
 def _inspect_one(solver_id, prog, q0, seed, tol):
@@ -151,43 +159,80 @@ def _inspect_one(solver_id, prog, q0, seed, tol):
         # default Drake print_level with a file is 4; bump for the full KKT terminal block
         opts.SetOption("IPOPT", "print_level", 5)
     if name == "NLopt":
-        print("hi i'm nlopt")
+        logger.info("skipping NLopt; no optimality print-file details available")
         return
 
     result = solver.Solve(prog, q0, opts)
 
-    print(f"--- {name} ({seed}, or theta_bound: {tol}) ---")
-    print(f"  success            : {result.is_success()}")
-    print(f"  solution_result    : {result.get_solution_result()}")
-    print(f"  optimal_cost       : {result.get_optimal_cost():.6e}")
+    logger.info("--- %s (%s, or theta_bound: %s) ---", name, seed, tol)
+    logger.info("  success            : %s", result.is_success())
+    logger.info("  solution_result    : %s", result.get_solution_result())
+    logger.info("  optimal_cost       : %.6e", result.get_optimal_cost())
 
-    print("  [1] solver's own optimality lines:")
+    logger.info("  [1] solver's own optimality lines:")
     _parse_printfile(name, print_file)
 
-    print("  [2] raw multiplier arrays:")
+    logger.info("  [2] raw multiplier arrays:")
     _dump_solver_details(name, result.get_solver_details())
 
     r, duals, missing = stationarity_residual(prog, result)
 
-    print("  [3] per-binding duals:")
+    logger.info("  [3] per-binding duals:")
     if duals:
         for label, y in duals.items():
-            print(f"    {label:42s}: {np.array2string(y, precision=5, max_line_width=120)}")
+            logger.info(
+                "    %-42s: %s",
+                label,
+                np.array2string(y, precision=5, max_line_width=120),
+            )
     if missing:
-        print(f"    (no dual available for: {sorted(set(missing))})")
+        logger.info("    (no dual available for: %s)", sorted(set(missing)))
 
-    print("  [4] common stationarity residual:")
+    logger.info("  [4] common stationarity residual:")
     if missing:
-        print("    N/A - some/all duals unavailable")
+        logger.info("    N/A - some/all duals unavailable")
     else:
-        print(f"    ||grad f - sum J^T y||_inf = {np.max(np.abs(r)):.3e}")
+        logger.info("    ||grad f - sum J^T y||_inf = %.3e", np.max(np.abs(r)))
         # split: how much of the residual sits on variables that are at a joint limit
-        print(f"    ||.||_2                    = {np.linalg.norm(r):.3e}")
-    print(f"  print file: {print_file}")
-    print()
+        logger.info("    ||.||_2                    = %.3e", np.linalg.norm(r))
+    logger.info("  print file: %s", print_file)
+    logger.info("")
 
 
 def main():
+    parser = argparse.ArgumentParser(
+        description="Inspect solver optimality tests on the IK problem."
+    )
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        choices=["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET"],
+        help="Minimum ik_benchmark log level.",
+    )
+    parser.add_argument(
+        "--log-file",
+        default=OUT_DIR / "inspect_solver_opt_tols.log",
+        help="Path for logs.",
+    )
+    parser.add_argument(
+        "--log-mode",
+        default="w",
+        choices=["w", "a"],
+        help="File log mode.",
+    )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Disable console logs. File logs are still written when --log-file is set.",
+    )
+    args = parser.parse_args()
+    configure_logging(
+        level=args.log_level,
+        log_file=args.log_file,
+        mode=args.log_mode,
+        quiet=args.quiet,
+    )
+
     for seed in SEEDS: 
         for tol in ORIENTATION_TOLS: 
             plant, plant_context, gripper_frame, q0 = build_plant(_TIME_STEP, _BOX)
@@ -209,13 +254,16 @@ def main():
 
             program_type = GetProgramType(prog)
             solver_ids = GetAvailableSolvers(program_type)
-            print(f"Program type: {program_type}")
-            print(f"Capable + available solvers: {[sid.name() for sid in solver_ids]}\n")
+            logger.info("Program type: %s", program_type)
+            logger.info(
+                "Capable + available solvers: %s\n",
+                [sid.name() for sid in solver_ids],
+            )
 
             for solver_id in solver_ids:
                 _inspect_one(solver_id, prog, scenario.q0, seed, tol)
 
-            print(f"Dumps written under {OUT_DIR}/.")
+            logger.info("Dumps written under %s/.", OUT_DIR)
 
 
 if __name__ == "__main__":
