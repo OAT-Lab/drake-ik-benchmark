@@ -35,8 +35,8 @@ _TASK_SPACE = {
     "cone_half_angle_rad": 0.5,
 }
 
-# Algorithms one might naively consider; only SLSQP handles nonlinear equality constraints.
-_NLOPT_ALGOS = ["GN_ISRES", "LN_COBYLA", "LD_SLSQP"] # yes all of these work enough
+# potential ones
+_NLOPT_ALGOS = ["GN_ISRES", "LN_COBYLA", "LD_SLSQP"] # only using SLSQP
 
 def _probe_nlopt_algorithms(prog, q0, print_dir):
     for algo in _NLOPT_ALGOS:
@@ -65,8 +65,7 @@ def _verbose_options(solver_name, print_file):
         opts.SetOption("IPOPT", "print_user_options", "yes")
         opts.SetOption("IPOPT", "print_advanced_options", "yes")
         opts.SetOption("IPOPT", "print_options_documentation", "yes")
-    # SNOPT writes its parameter summary to the print file (kPrintFileName).
-    # NLopt does not self-report; defaults inferred from docs + nlopt_solver.cc.
+    # NLopt doesn't work
     return opts
 
 
