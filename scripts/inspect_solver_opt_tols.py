@@ -80,7 +80,7 @@ def stationarity_residual(prog, result):
     for b in prog.GetAllCosts():
         idx = prog.FindDecisionVariableIndices(b.variables())
         val = b.evaluator().Eval(InitializeAutoDiff(x[idx]))
-        r[idx] += ExtractGradient(val)[0]          # (1,k) -> (k,)
+        r[idx] += ExtractGradient(val)[0]         
 
     duals = {}
     missing = []
@@ -93,9 +93,10 @@ def stationarity_residual(prog, result):
             continue
         duals[label] = y
         idx = prog.FindDecisionVariableIndices(b.variables())
-        val = b.evaluator().Eval(InitializeAutoDiff(x[idx]))
-        J = ExtractGradient(val)                   # (m,k) stored-sense Jacobian
-        r[idx] -= J.T @ y
+        val = b.evaluator().Eval(InitializeAutoDiff(x[idx])) # plant is double so uses same method for calculating J
+        J = ExtractGradient(val) # (m, k)     
+          
+        r[idx] -= J.T @ y 
     return r, duals, missing
 
 
