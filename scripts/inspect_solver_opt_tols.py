@@ -51,10 +51,11 @@ _TASK_SPACE = {
 _PRINTFILE_MARKERS = {
     "IPOPT": ["Dual infeasibility", "Constraint violation",
               "Variable bound violation", "Complementarity", "Overall NLP error"],
-    "SNOPT": ["Max Primal infeas", "Max pi", "Max Dual infeas", "INFO", "EXIT"],
+    "SNOPT": ["Max Primal infeas", "Max Dual infeas", "INFO", "EXIT"],
 }
 
 SEEDS = [0, 42]
+ORIENTATION_TOLS = [0.0, 0.0001]
 
 
 def _binding_label(binding) -> str:
@@ -70,7 +71,9 @@ def stationarity_residual(prog, result):
 
     grad_f and J from each evaluator's autodiff (stored sense, matching its bounds)
     
-    y from GetDualSolution (shadow price). Returns (r, per_binding_duals, missing)."""
+    y from GetDualSolution. 
+    
+    Returns (r, per_binding_duals, missing)."""
     x = result.GetSolution(prog.decision_variables())
     r = np.zeros(prog.num_vars())
 
@@ -97,7 +100,7 @@ def stationarity_residual(prog, result):
 
 
 def _dump_solver_details(name, details):
-    """Print the raw multiplier arrays each solver exposes."""
+    """print the raw multiplier arrays from each solver."""
     def show(attr):
         if hasattr(details, attr):
             v = np.atleast_1d(getattr(details, attr))
@@ -111,7 +114,7 @@ def _dump_solver_details(name, details):
 
 
 def _parse_printfile(name, print_file: Path):
-    """Pull the solver's own optimality lines out of its print file."""
+    """pull the solver's own optimality lines out of its print file."""
     if not print_file.exists():
         print("    (no print file)")
         return
@@ -135,11 +138,11 @@ def _parse_printfile(name, print_file: Path):
                     print(f"    | {line.strip()}")
 
 
-def _inspect_one(solver_id, prog, q0, seed):
+def _inspect_one(solver_id, prog, q0, seed, tol):
     solver = MakeSolver(solver_id)
     name = solver.solver_id().name()
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    print_file = OUT_DIR / f"{name}_optprint_{seed}.txt"
+    print_file = OUT_DIR / f"{name}_optprint_{seed}_or{tol}.txt"
 
     opts = SolverOptions()
     opts.SetOption(CommonSolverOption.kPrintFileName, str(print_file))
@@ -147,38 +150,37 @@ def _inspect_one(solver_id, prog, q0, seed):
         # default Drake print_level with a file is 4; bump for the full KKT terminal block
         opts.SetOption("IPOPT", "print_level", 5)
     if name == "NLopt":
-        # SLSQP only 
-        opts.SetOption(NloptSolver.id(), NloptSolver.AlgorithmName(), "LD_SLSQP")
-        opts.SetOption(NloptSolver.id(), NloptSolver.MaxEvalName(), 100000)
+        print("hi i'm nlopt")
+        return
 
     result = solver.Solve(prog, q0, opts)
 
-    print(f"--- {name} ---")
+    print(f"--- {name} ({seed}, or theta_bound: {tol}) ---")
     print(f"  success            : {result.is_success()}")
     print(f"  solution_result    : {result.get_solution_result()}")
     print(f"  optimal_cost       : {result.get_optimal_cost():.6e}")
 
-    print("  [1] solver's own optimality lines (from print file):")
+    print("  [1] solver's own optimality lines:")
     _parse_printfile(name, print_file)
 
-    print("  [2] raw terminal multiplier arrays (solver_details):")
+    print("  [2] raw multiplier arrays:")
     _dump_solver_details(name, result.get_solver_details())
 
     r, duals, missing = stationarity_residual(prog, result)
 
-    print("  [3] per-binding duals (GetDualSolution, shadow-price convention):")
+    print("  [3] per-binding duals:")
     if duals:
         for label, y in duals.items():
             print(f"    {label:42s}: {np.array2string(y, precision=5, max_line_width=120)}")
     if missing:
         print(f"    (no dual available for: {sorted(set(missing))})")
 
-    print("  [4] common full-Lagrangian stationarity residual:")
+    print("  [4] common stationarity residual:")
     if missing:
-        print("    N/A -- some/all duals unavailable (expected for NLopt); cannot reconstruct.")
+        print("    N/A - some/all duals unavailable")
     else:
         print(f"    ||grad f - sum J^T y||_inf = {np.max(np.abs(r)):.3e}")
-        # split: how much of the residual sits on variables that are AT a joint limit
+        # split: how much of the residual sits on variables that are at a joint limit
         print(f"    ||.||_2                    = {np.linalg.norm(r):.3e}")
     print(f"  print file: {print_file}")
     print()
@@ -186,32 +188,33 @@ def _inspect_one(solver_id, prog, q0, seed):
 
 def main():
     for seed in SEEDS: 
-        plant, plant_context, gripper_frame, q0 = build_plant(_TIME_STEP, _BOX)
+        for tol in ORIENTATION_TOLS: 
+            plant, plant_context, gripper_frame, q0 = build_plant(_TIME_STEP, _BOX)
 
-        scenario = generate_scenarios(
-            plant, plant_context, gripper_frame, q0,
-            n=1, base_seed=seed,
-            method_mix={"joint_space": 1.0, "task_space": 0.0},
-            task_space_params=_TASK_SPACE,
-        )[0]
+            scenario = generate_scenarios(
+                plant, plant_context, gripper_frame, q0,
+                n=1, base_seed=seed,
+                method_mix={"joint_space": 1.0, "task_space": 0.0},
+                task_space_params=_TASK_SPACE,
+            )[0]
 
-        prog, q = build_ik_prog(
-            plant, plant_context, gripper_frame, scenario,
-            orientation_tol=0.0,
-            use_minimum_distance=True,
-            min_distance_bound=0.001,
-            influence_distance_offset=0.1,
-        )
+            prog, q = build_ik_prog(
+                plant, plant_context, gripper_frame, scenario,
+                orientation_tol=tol,
+                use_minimum_distance=True,
+                min_distance_bound=0.001,
+                influence_distance_offset=0.1,
+            )
 
-        program_type = GetProgramType(prog)
-        solver_ids = GetAvailableSolvers(program_type)
-        print(f"Program type: {program_type}")
-        print(f"Capable + available solvers: {[sid.name() for sid in solver_ids]}\n")
+            program_type = GetProgramType(prog)
+            solver_ids = GetAvailableSolvers(program_type)
+            print(f"Program type: {program_type}")
+            print(f"Capable + available solvers: {[sid.name() for sid in solver_ids]}\n")
 
-        for solver_id in solver_ids:
-            _inspect_one(solver_id, prog, scenario.q0, seed)
+            for solver_id in solver_ids:
+                _inspect_one(solver_id, prog, scenario.q0, seed, tol)
 
-        print(f"Dumps written under {OUT_DIR}/.")
+            print(f"Dumps written under {OUT_DIR}/.")
 
 
 if __name__ == "__main__":
