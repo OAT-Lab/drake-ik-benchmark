@@ -21,10 +21,10 @@ def configure_logging(
     quiet: bool = False,
     stream: TextIO | None = None,
 ) -> logging.Logger:
-    """Configure logging for the ik_benchmark package.
+    """config logging for the ik_benchmark package
 
-    The package logger is isolated from the root logger so benchmark logs do not
-    change Drake or dependency logging behavior.
+    package logger is isolated from the root logger so benchmark logs don't
+    change drake or dependency logging behavior
     """
     if mode not in {"w", "a"}:
         raise ValueError(f"log mode must be 'w' or 'a', got {mode!r}")
@@ -65,7 +65,7 @@ def make_timestamped_run_dir(
     *,
     now: datetime | None = None,
 ) -> Path:
-    """Create and return a unique timestamped benchmark run directory."""
+    """create and return timestamped benchmark run directory"""
     timestamp = (now or datetime.now()).strftime("%Y-%m-%d_%H%M%S")
     runs_dir = Path(out_dir) / "runs"
     run_dir = runs_dir / timestamp
@@ -78,7 +78,7 @@ def make_timestamped_run_dir(
 
 
 def resolve_log_file(log_file: str | Path | None, base_dir: str | Path) -> Path | None:
-    """Resolve a configured log file path against an output directory."""
+    """resolve a configured log file path against an output directory"""
     if log_file is None:
         return None
 
