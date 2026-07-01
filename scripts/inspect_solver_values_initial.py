@@ -28,13 +28,13 @@ from pydrake.solvers import (
 from ik_benchmark.log_config import configure_logging
 
 
-OUT_DIR = Path("results/primal_inspect")
+OUT_DIR = Path("results/value_inspect_init")
 SEEDS = [0, 42]
 ORIENTATION_TOLS = [0.0, 0.0001]
 
 # logging
 _LOG_LEVEL = "INFO"
-_LOG_FILE = OUT_DIR / "inspect_solver_primal_values.log"
+_LOG_FILE = OUT_DIR / "inspect_solver_values_initial.log"
 _LOG_MODE = "w"
 _LOG_QUIET = False
 
@@ -316,7 +316,7 @@ def main():
     variable_rows = []
     constraint_rows = []
 
-    logger.info("writing primal inspection results to %s", OUT_DIR)
+    logger.info("writing value inspection results to %s", OUT_DIR)
     for seed in SEEDS:
         for orientation_tol in ORIENTATION_TOLS:
             plant, plant_context, gripper_frame, q0 = build_plant(_TIME_STEP, _BOX)
@@ -360,7 +360,7 @@ def main():
                 constraint_rows.extend(rows["constraints"])
 
     _write_csvs(OUT_DIR, summary_rows, cost_rows, variable_rows, constraint_rows)
-    logger.info("wrote primal inspection CSVs under %s", OUT_DIR)
+    logger.info("wrote value inspection CSVs under %s", OUT_DIR)
 
 
 if __name__ == "__main__":
