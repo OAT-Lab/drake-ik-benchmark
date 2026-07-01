@@ -127,12 +127,6 @@ def build_solve_tables(
 ) -> SolveTables:
     """Flatten one solved prog into the tables."""
     x = np.asarray(result.GetSolution(prog.decision_variables()), dtype=float)
-
-    # ONE constraint list, ONE dual lookup, shared by every downstream consumer.
-    # prog.GetAllConstraints() (pydrake) returns FRESH wrapper objects on each
-    # call, so id(binding) is not stable across calls -- keying duals by id()
-    # across separate calls is the misassociation bug. Fetch once, index by
-    # position, and hand this list + duals to all consumers.
     constraints = list(prog.GetAllConstraints())            # pydrake
     duals = []
     for b in constraints:
@@ -187,9 +181,6 @@ def build_solve_tables(
         up = np.atleast_1d(ev.upper_bound()).astype(float)
         label = _binding_label(b)
         n_rows = len(vals)
-        # With correct association len(y) == n_rows; a mismatch is now a real
-        # Drake-level surprise (not the old id() collision). Log and drop the
-        # dual for this constraint rather than mis-index or crash.
         if y is not None and len(y) != n_rows:
             logger.warning(
                 "dual/value length mismatch solve=%s constraint=%s "
@@ -244,12 +235,8 @@ def build_solve_tables(
 
 
 def _joint_bounds_and_duals(prog, constraints, duals):
-    """Intersect all BoundingBoxConstraints into per-variable [lower, upper] and
-    gather each variable's bound dual into a length-nv array.
-
-    Iterates the shared (constraints, duals) lists by position -- each bounding
-    box reads its OWN dual (length == number of variables it bounds), so the
-    old id()-collision IndexError cannot occur.
+    """Intersect all BoundingBoxConstraints into per-variable and
+    gather each variable's bound dual into an array.
     """
     n = prog.num_vars()
     lower = np.full(n, -np.inf)
