@@ -2,8 +2,8 @@
 results/*
 !results/.gitkeep
 
-**/results/
-
+**/results/*
+!**/results/.gitkeep
 # outputs
 
 # Python
