@@ -2,6 +2,10 @@
 results/*
 !results/.gitkeep
 
+**/results/
+
+# outputs
+
 # Python
 __pycache__/
 *.py[cod]
