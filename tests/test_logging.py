@@ -6,9 +6,11 @@ from datetime import datetime
 
 import pytest
 
-from ik_benchmark.logging import (
+from ik_benchmark.log_config import (
     PACKAGE_LOGGER_NAME,
     configure_logging,
+)
+from ik_benchmark.paths import (
     make_timestamped_run_dir,
     resolve_log_file,
 )

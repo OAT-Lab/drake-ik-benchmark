@@ -1,9 +1,9 @@
-"""Logging config for benchmark entry points."""
+"""Logging config for the ik_benchmark package.
+"""
 
 from __future__ import annotations
 
 import logging
-from datetime import datetime
 from pathlib import Path
 from typing import TextIO
 
@@ -21,15 +21,23 @@ def configure_logging(
     quiet: bool = False,
     stream: TextIO | None = None,
 ) -> logging.Logger:
-    """config logging for the ik_benchmark package
+    """Configure the ik_benchmark package logger and return it
 
-    package logger is isolated from the root logger so benchmark logs don't
-    change drake or dependency logging behavior
+    Args:
+        level: minimum level, name or int 
+        log_file: also write logs to this file
+        mode: w overwrites, a appends
+        quiet: if true, don't add console handler (file logs still written)
+        stream: console stream for the console handler (default stderr)
+
+    Returns:
+        The configured ik_benchmark logger
     """
     if mode not in {"w", "a"}:
         raise ValueError(f"log mode must be 'w' or 'a', got {mode!r}")
 
     resolved_level = _resolve_level(level)
+
     logger = logging.getLogger(PACKAGE_LOGGER_NAME)
     logger.setLevel(resolved_level)
     logger.propagate = False
@@ -60,35 +68,8 @@ def configure_logging(
     return logger
 
 
-def make_timestamped_run_dir(
-    out_dir: str | Path,
-    *,
-    now: datetime | None = None,
-) -> Path:
-    """create and return timestamped benchmark run directory"""
-    timestamp = (now or datetime.now()).strftime("%Y-%m-%d_%H%M%S")
-    runs_dir = Path(out_dir) / "runs"
-    run_dir = runs_dir / timestamp
-    suffix = 2
-    while run_dir.exists():
-        run_dir = runs_dir / f"{timestamp}_{suffix:02d}"
-        suffix += 1
-    run_dir.mkdir(parents=True)
-    return run_dir
-
-
-def resolve_log_file(log_file: str | Path | None, base_dir: str | Path) -> Path | None:
-    """resolve a configured log file path against an output directory"""
-    if log_file is None:
-        return None
-
-    path = Path(log_file)
-    if path.is_absolute():
-        return path
-    return Path(base_dir) / path
-
-
 def _resolve_level(level: str | int) -> int:
+    """Turn a level name/int into a logging level int, or raise"""
     if isinstance(level, int):
         return level
 
