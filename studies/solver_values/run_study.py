@@ -63,9 +63,9 @@ def _solver_options(solver_id, solver_name, cfg):
     elif solver_name == "NLopt":
         n = cfg["nlopt"]
         opts.SetOption(solver_id, NloptSolver.AlgorithmName(), "LD_SLSQP")
-        opts.SetOption(solver_id, NloptSolver.ConstraintToleranceName(), feas)
-        opts.SetOption(solver_id, NloptSolver.XRelativeToleranceName(), optm)
-        opts.SetOption(solver_id, NloptSolver.MaxEvalName(), n["max_eval"])
+        opts.SetOption(solver_id, NloptSolver.ConstraintToleranceName(), feas)   # feasibility stays pinned
+        opts.SetOption(solver_id, NloptSolver.XRelativeToleranceName(), 1e-8)    # tight step tol, NOT `optm`
+        opts.SetOption(solver_id, NloptSolver.MaxEvalName(), n["max_eval"])      # Bucket 3: keep this generous
         opts.SetOption(solver_id, NloptSolver.MaxTimeName(), n["max_time_sec"])
     return opts
 
@@ -136,15 +136,23 @@ def main():
                     except Exception as exc:  # noqa: BLE001 - record and continue
                         logger.exception("solver raised %s", solve_id)
                         solve_rows.append({
-                            "solve_id": solve_id, "scenario_id": scenario_id,
-                            "seed": seed, "orientation_tol": orientation_tol,
-                            "solver_name": solver_name, "success": False,
-                            "solution_result": None, "optimal_cost": float("nan"),
-                            "evaluated_cost": float("nan"), "feasible": False,
+                            "solve_id": solve_id, 
+                            "scenario_id": scenario_id,
+                            "seed": seed, 
+                            "orientation_tol": orientation_tol,
+                            "solver_name": solver_name,
+                            "generation_method": scenario.generation_method, 
+                            "success": False,
+                            "solution_result": None, 
+                            "optimal_cost": float("nan"),
+                            "evaluated_cost": float("nan"), 
+                            "feasible": False,
                             "max_violation": float("nan"),
-                            "common_residual_inf": None, "common_residual_2": None,
+                            "common_residual_inf": None, 
+                            "common_residual_2": None,
                             "native_optimality": None,
-                            "error_type": type(exc).__name__, "error_message": str(exc),
+                            "error_type": type(exc).__name__, 
+                            "error_message": str(exc),
                         })
                         continue
 
@@ -153,6 +161,7 @@ def main():
                         prog, result,
                         solve_id=solve_id, scenario_id=scenario_id, seed=seed,
                         orientation_tol=orientation_tol, solver_name=solver_name,
+                        generation_method=scenario.generation_method, 
                         feasibility_threshold=feas_threshold,
                         native_optimality=native_opt,
                     )

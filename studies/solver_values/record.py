@@ -25,6 +25,7 @@ class SolveRecord:
     seed: int
     orientation_tol: float
     solver_name: str
+    generation_method: str | None   # "joint_space" | "task_space"
     success: bool
     solution_result: str | None
     optimal_cost: float          # solver's own
@@ -83,6 +84,14 @@ def _row_violation(value, lower, upper) -> float:
 
 def _stationarity(prog, constraints, duals, x):
     """Common full-Lagrangian residual  grad f - sum_i J_i^T y_i  at x.
+
+    `constraints` / `duals` are the SINGLE shared list + position-aligned duals
+    built once in build_solve_tables. duals[i] is None where a dual was
+    unavailable (e.g. NLopt provides none). Iterated together by position, so
+    each J_i is paired with its own y_i -- no id() keying, no re-iteration.
+
+    Returns the length-num_vars residual vector, or None if any constraint has
+    no dual (residual is undefined without a full multiplier set).
     """
     r = np.zeros(prog.num_vars())
 
@@ -111,6 +120,7 @@ def build_solve_tables(
     seed,
     orientation_tol,
     solver_name,
+    generation_method=None,
     feasibility_threshold,
     native_optimality=None,
     q_at_limit_tol=1e-9,
@@ -139,6 +149,7 @@ def build_solve_tables(
         rec = SolveRecord(
             solve_id=solve_id, scenario_id=scenario_id, seed=seed,
             orientation_tol=orientation_tol, solver_name=solver_name,
+            generation_method=generation_method,
             success=False, solution_result=str(result.get_solution_result()),
             optimal_cost=np.nan, evaluated_cost=np.nan, feasible=False,
             max_violation=np.nan, common_residual_inf=None, common_residual_2=None,
@@ -219,6 +230,7 @@ def build_solve_tables(
     rec = SolveRecord(
         solve_id=solve_id, scenario_id=scenario_id, seed=seed,
         orientation_tol=orientation_tol, solver_name=solver_name,
+        generation_method=generation_method,
         success=bool(result.is_success()),
         solution_result=str(result.get_solution_result()),
         optimal_cost=float(result.get_optimal_cost()),
