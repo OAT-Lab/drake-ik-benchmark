@@ -51,24 +51,24 @@ def _sample_joint_space(plant, plant_context, gripper_frame, lower, upper, rng):
     return X_WG.translation(), X_WG.rotation().matrix()
 
 
-def _sample_cone_orientation(rng, cone_half_angle_rad):
+def _sample_cone_orientation(rng, max_tilt_rad):
     """random orientation: nominal downward grasp tilted within cone
 
-    cone_half_angle_rad = 0 gives exact nominal orientation
+    max_tilt_rad = 0 gives exact nominal orientation
     """
     axis = rng.normal(size=3) # random unit axis
     norm = np.linalg.norm(axis)
     if norm < 1e-12:            # fallback
         axis, norm = np.array([1.0, 0.0, 0.0]), 1.0
     axis = axis / norm
-    angle = rng.uniform(0.0, cone_half_angle_rad)
+    angle = rng.uniform(0.0, max_tilt_rad)
     tilt = RotationMatrix(AngleAxis(angle=angle, axis=axis))
     return (tilt @ _NOMINAL_DOWNWARD).matrix()
 
 
-def _sample_task_space(rng, position_min, position_max, cone_half_angle_rad):
+def _sample_task_space(rng, position_min, position_max, max_tilt_rad):
     position = rng.uniform(position_min, position_max)
-    orientation = _sample_cone_orientation(rng, cone_half_angle_rad)
+    orientation = _sample_cone_orientation(rng, max_tilt_rad)
     return position, orientation
 
 
@@ -91,7 +91,7 @@ def generate_scenarios(
         e.g. {"joint_space": 0.5, "task_space": 0.5}; fractions must sum to 1.0.
     task_space_params : dict
         {"position_min": [x, y, z], "position_max": [x, y, z],
-         "cone_half_angle_rad": float}.
+         "max_tilt_rad": float}.
 
     Returns: 
     list[Scenario]
@@ -113,7 +113,7 @@ def generate_scenarios(
 
     pos_min = np.asarray(task_space_params["position_min"], dtype=float)
     pos_max = np.asarray(task_space_params["position_max"], dtype=float)
-    cone = float(task_space_params["cone_half_angle_rad"])
+    cone = float(task_space_params["max_tilt_rad"])
 
     seed_seq = np.random.SeedSequence(base_seed) # generates n random seeds from base seed
     children = seed_seq.spawn(n)

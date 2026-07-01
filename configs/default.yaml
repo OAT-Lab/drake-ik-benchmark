@@ -1,32 +1,36 @@
 # Default benchmark configuration
 
-# a run is fully described by this file + the pinned Drake version (see pyproject.toml).
+# a run is fully described by this file + the pinned Drake version
 # nothing that affects results should live in code instead of here.
 
 # LOGGING
 logging:
-  level: INFO              # CRITICAL, ERROR, WARNING, INFO, DEBUG, or NOTSET
-  file: benchmark.log      # relative paths are written inside the timestamped run dir
-  mode: w                  # w = fresh log per run, a = append
-  quiet: false             # true disables console logs; file logs still write
+  level: INFO       
+  file: benchmark.log
+  mode: w                 
+  quiet: false             
 
 # REPRODUCIBILITY
-base_seed: 42            # master RNG seed
+base_seed: 42
+
+# PLANT
+time_step: 0.001
+box:                       # collision box, welded to the world
+  size: [0.1, 0.1, 1.0]    # xyz extents (m)
+  position: [0.25, 0.0, 0.5]  # xyz of box center in world (m)
 
 # SCENARIO SET
 n: 100                   # total number of scenarios
 method_mix:              # fraction of scenarios per generation method (must sum to 1.0)
-  joint_space: 0.5       # sample a random q, forward-kinematics to a reachable target
+  joint_space: 0.5       # sample a random q, forward kinematics to a reachable target
   task_space: 0.5        # sample a pose directly in the workspace (might be unreachable)
 
-# Task-space sampling parameters.
-# TODO: design these together. placeholders not final
-#   - the workspace box that target positions are drawn from (xyz min/max)
-#   - how orientations are sampled
+# task-space sampling
+
 task_space:
-  position_min: [0, 0, 0]
-  position_max: [0, 0, 0]
-  orientation_sampling: "<3"
+  position_min: [0.3, -0.3, 0.2]
+  position_max: [0.6, 0.3, 0.6]
+  max_tilt_rad: 0.5          # tilt from nominal downward grasp 
 
 # CONSTRAINTS
 orientation_tol: 0.0     # radians, 0.0 = exact orientation
@@ -37,11 +41,10 @@ orientation_tol: 0.0     # radians, 0.0 = exact orientation
 tolerances:
   feasibility_tol: 1.0e-6
   optimality_tol: 1.0e-6
-  major_iter_limit: 1000
+major_iter_limit: 100000
 
 # MEASUREMENT
 # solver-blind feasibility threshold used by measure.py
-# separate from the solver tolerances above.
 feasibility_threshold: 1.0e-4
 
 # TIMING

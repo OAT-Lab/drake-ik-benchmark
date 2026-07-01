@@ -1,40 +1,50 @@
 """Diagnostic: write solver-blind solution values to CSV files.
 
 ***not part of the benchmark.
-inspects what each available solver returns for ik problems
+produces 
+objective, variable, and constraint values in structured tables for each solver
 
-returns objective, variable, and constraint values in structured tables.
+2 seeds, 2 orientation tolerances - add more for more structured tests
+
+doesn't use default.yaml - throwaway script
 """
 
 from __future__ import annotations
 
-import io
 import logging
-from datetime import datetime
+from pathlib import Path
 
-import pytest
-
-from ik_benchmark.log_config import (
-    PACKAGE_LOGGER_NAME,
-    configure_logging,
+import numpy as np
+import pandas as pd
+from pydrake.solvers import (
+    BoundingBoxConstraint,
+    GetAvailableSolvers,
+    GetProgramType,
+    MakeSolver,
+    NloptSolver,
+    SolverOptions,
 )
-from ik_benchmark.paths import (
-    make_timestamped_run_dir,
-    resolve_log_file,
-)
 
+from ik_benchmark.log_config import configure_logging
 
 
 OUT_DIR = Path("results/primal_inspect")
 SEEDS = [0, 42]
 ORIENTATION_TOLS = [0.0, 0.0001]
 
+# logging
+_LOG_LEVEL = "INFO"
+_LOG_FILE = OUT_DIR / "inspect_solver_primal_values.log"
+_LOG_MODE = "w"
+_LOG_QUIET = False
+
+# setup and sampling 
 _TIME_STEP = 0.001
 _BOX = {"size": [0.1, 0.1, 1.0], "position": [0.25, 0.0, 0.5]}
 _TASK_SPACE = {
     "position_min": [0.3, -0.3, 0.2],
     "position_max": [0.6, 0.3, 0.6],
-    "cone_half_angle_rad": 0.5,
+    "max_tilt_rad": 0.5,
 }
 
 SUMMARY_COLUMNS = [
@@ -72,7 +82,7 @@ CONSTRAINT_COLUMNS = [
     "violation",
 ]
 
-logger = logging.getLogger("ik_benchmark.scripts.inspect_solver_primal_values")
+logger = logging.getLogger(__name__)
 
 
 def _binding_label(binding) -> str:
@@ -130,10 +140,19 @@ def _row_violation(value, lower_bound, upper_bound):
 
 
 def _constraint_rows(prog, x, run_keys):
+    """Value-only constraint table (no Jacobians; double Eval).
+
+    Joint-limit BoundingBoxConstraints are recorded here AND separately as
+    variable bounds (variables.csv). To avoid double-counting joint-limit
+    slack, ``max_constraint_violation`` is taken over the GENERAL
+    (non-bounding-box) constraints only; bound satisfaction is reflected in
+    the variable rows.
+    """
     rows = []
     max_violation = 0.0
     for binding in prog.GetAllConstraints():
         evaluator = binding.evaluator()
+        is_bound = isinstance(evaluator, BoundingBoxConstraint)
         idx = prog.FindDecisionVariableIndices(binding.variables())
         values = np.atleast_1d(evaluator.Eval(x[idx])).astype(float)
         lower = np.atleast_1d(evaluator.lower_bound()).astype(float)
@@ -143,7 +162,8 @@ def _constraint_rows(prog, x, run_keys):
             zip(lower, values, upper, strict=True)
         ):
             violation = _row_violation(value, lower_bound, upper_bound)
-            max_violation = max(max_violation, violation)
+            if not is_bound:
+                max_violation = max(max_violation, violation)
             rows.append(
                 {
                     **run_keys,
@@ -171,11 +191,17 @@ def _inspect_solver(solver_id, prog, q0, run_keys):
     solver_name = solver.solver_id().name()
     row_keys = {**run_keys, "solver_name": solver_name}
 
+    logger.debug(
+        "solving solver=%s seed=%s orientation_tol=%s",
+        solver_name,
+        run_keys["seed"],
+        run_keys["orientation_tol"],
+    )
     try:
         result = solver.Solve(prog, q0, _solver_options(solver_name))
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - diagnostic: record and continue
         logger.exception(
-            "solver failed solver=%s seed=%s orientation_tol=%s",
+            "solver raised solver=%s seed=%s orientation_tol=%s",
             solver_name,
             run_keys["seed"],
             run_keys["orientation_tol"],
@@ -189,6 +215,9 @@ def _inspect_solver(solver_id, prog, q0, run_keys):
                     "optimal_cost": np.nan,
                     "evaluated_total_cost": np.nan,
                     "max_constraint_violation": np.nan,
+                    # error_type/message are populated ONLY for a raised
+                    # exception; a solver that *returns* failure has
+                    # success=False with error_type=None.
                     "error_type": type(exc).__name__,
                     "error_message": str(exc),
                 }
@@ -242,45 +271,11 @@ def _write_csvs(out_dir, summary_rows, cost_rows, variable_rows, constraint_rows
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Write primal IK solution diagnostics to CSV files."
-    )
-    parser.add_argument("--out", default=OUT_DIR, help="Directory for result CSVs.")
-    parser.add_argument(
-        "--log-level",
-        default="INFO",
-        choices=["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET"],
-        help="Minimum ik_benchmark log level.",
-    )
-    parser.add_argument(
-        "--log-file",
-        default=None,
-        help="Path for logs. Defaults to <out>/inspect_solver_primal_values.log.",
-    )
-    parser.add_argument(
-        "--log-mode",
-        default="w",
-        choices=["w", "a"],
-        help="File log mode.",
-    )
-    parser.add_argument(
-        "--quiet",
-        action="store_true",
-        help="Disable console logs. File logs are still written.",
-    )
-    args = parser.parse_args()
-
-    out_dir = Path(args.out)
-    log_file = (
-        Path(args.log_file)
-        if args.log_file is not None
-        else out_dir / "inspect_solver_primal_values.log"
-    )
     configure_logging(
-        level=args.log_level,
-        log_file=log_file,
-        mode=args.log_mode,
-        quiet=args.quiet,
+        level=_LOG_LEVEL,
+        log_file=_LOG_FILE,
+        mode=_LOG_MODE,
+        quiet=_LOG_QUIET,
     )
 
     from ik_benchmark.plant import build_plant
@@ -292,7 +287,7 @@ def main():
     variable_rows = []
     constraint_rows = []
 
-    logger.info("writing primal inspection results to %s", out_dir)
+    logger.info("writing primal inspection results to %s", OUT_DIR)
     for seed in SEEDS:
         for orientation_tol in ORIENTATION_TOLS:
             plant, plant_context, gripper_frame, q0 = build_plant(_TIME_STEP, _BOX)
@@ -335,8 +330,8 @@ def main():
                 variable_rows.extend(rows["variables"])
                 constraint_rows.extend(rows["constraints"])
 
-    _write_csvs(out_dir, summary_rows, cost_rows, variable_rows, constraint_rows)
-    logger.info("wrote primal inspection CSVs under %s", out_dir)
+    _write_csvs(OUT_DIR, summary_rows, cost_rows, variable_rows, constraint_rows)
+    logger.info("wrote primal inspection CSVs under %s", OUT_DIR)
 
 
 if __name__ == "__main__":

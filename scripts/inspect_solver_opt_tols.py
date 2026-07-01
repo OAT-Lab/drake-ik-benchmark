@@ -48,7 +48,7 @@ _BOX = {"size": [0.1, 0.1, 1.0], "position": [0.25, 0.0, 0.5]}
 _TASK_SPACE = {
     "position_min": [0.3, -0.3, 0.2],
     "position_max": [0.6, 0.3, 0.6],
-    "cone_half_angle_rad": 0.5,
+    "max_tilt_rad": 0.5,
 }
 
 # lines to pull from print files
