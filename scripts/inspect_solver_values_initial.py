@@ -199,6 +199,35 @@ def _inspect_solver(solver_id, prog, q0, run_keys):
     )
     try:
         result = solver.Solve(prog, q0, _solver_options(solver_name))
+        x = np.asarray(result.GetSolution(prog.decision_variables()), dtype=float)
+
+        if not np.all(np.isfinite(x)):
+            logger.warning(
+                "non-finite solution treated as failure solver=%s seed=%s tol=%s",
+                solver_name, run_keys["seed"], run_keys["orientation_tol"],
+            )
+            return {                       # stops crash if q not finite
+                "summary": [
+                    {
+                        **row_keys,
+                        "success": False,
+                        "solution_result": str(result.get_solution_result()),
+                        "optimal_cost": np.nan,
+                        "evaluated_total_cost": np.nan,
+                        "max_constraint_violation": np.nan,
+                        "error_type": "NonFiniteSolution",
+                        "error_message": f"{int((~np.isfinite(x)).sum())} non-finite entries",
+                    }
+                ],
+                "costs": [],
+                "variables": [],
+                "constraints": [],
+            }
+
+        # only reached when x is finite:
+        cost_rows, evaluated_total_cost = _evaluate_cost_rows(prog, x, row_keys)
+        constraint_rows, max_violation = _constraint_rows(prog, x, row_keys)
+        variable_rows = _decision_variable_rows(prog, x, _collect_variable_bounds(prog), row_keys)
     except Exception as exc:  # noqa: BLE001 - diagnostic: record and continue
         logger.exception(
             "solver raised solver=%s seed=%s orientation_tol=%s",
