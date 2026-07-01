@@ -2,9 +2,9 @@
 results/*
 !results/.gitkeep
 
+# misc output
 **/results/*
 !**/results/.gitkeep
-# outputs
 
 # Python
 __pycache__/
