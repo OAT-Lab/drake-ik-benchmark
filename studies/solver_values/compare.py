@@ -2,13 +2,13 @@
 
 reads raw record tables and makes comp for each pair
 
-  q_diff_inf, q_diff_2          how far apart the returned joint vectors are
-  cost_diff_abs, cost_diff_rel  difference in solver-blind objective
-  common_residual_inf_diff      difference in stationarity of each returned point
-  both_feasible                 both solves feasible (solver-blind)
-  same_q                        q_diff_inf < q_same_tol
+  q_diff_inf, q_diff_2:         how far apart the returned joint vectors are
+  cost_diff_abs, cost_diff_rel: difference in solver-blind objective
+  common_residual_inf_diff:     difference in stationarity of each returned point
+  both_feasible:                both solves feasible (solver-blind)
+  same_q:                       q_diff_inf < q_same_tol
 
-Output: pairwise.csv (one row per scenario x solver-pair)
+Output: pairwise.csv (one row per scenario x solver pair)
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ def _load_config(path):
 def _reconstruct_q(joints_df):
     """Map solve_id -> q vector
 
-    Returns {solve_id: q} with joints in ascending index order
+    Returns {solve_id: q} with joints in ascending index order.
     """
     wide = (
         joints_df.pivot(index="solve_id", columns="joint_index", values="q_value")
@@ -87,15 +87,20 @@ def build_pairwise(solves_df, joints_df, q_same_tol):
                 "scenario_id": scenario_id,
                 "seed": a["seed"],
                 "orientation_tol": a["orientation_tol"],
+                "generation_method": a["generation_method"],
                 "solver_a": a["solver_name"],
                 "solver_b": b["solver_name"],
                 "q_diff_inf": q_inf,
                 "q_diff_2": q_2,
+                "evaluated_cost_a": a["evaluated_cost"],
+                "evaluated_cost_b": b["evaluated_cost"],
                 "cost_diff_abs": cost_abs,
                 "cost_diff_rel": cost_abs / denom,
                 "common_residual_inf_diff": _residual_diff(
                     a["common_residual_inf"], b["common_residual_inf"]
                 ),
+                "feasible_a": bool(a["feasible"]),
+                "feasible_b": bool(b["feasible"]),
                 "both_feasible": bool(a["feasible"] and b["feasible"]),
                 "same_q": bool(np.isfinite(q_inf) and q_inf < q_same_tol),
             })
