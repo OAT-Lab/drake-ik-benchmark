@@ -74,8 +74,8 @@ class SolveTables:
 
 def _binding_label(binding) -> str:
     ev = binding.evaluator()
-    desc = ev.get_description()
-    return desc if desc else type(ev).__name__
+    desc = ev.get_description() # name of evaluator
+    return desc if desc else type(ev).__name__  
 
 
 def _row_violation(value, lower, upper) -> float:
@@ -83,21 +83,15 @@ def _row_violation(value, lower, upper) -> float:
 
 
 def _stationarity(prog, constraints, duals, x):
-    """Common full-Lagrangian residual  grad f - sum_i J_i^T y_i  at x.
+    """grad f - sum_i J_i^T y_i  at x
 
-    `constraints` / `duals` are the SINGLE shared list + position-aligned duals
-    built once in build_solve_tables. duals[i] is None where a dual was
-    unavailable (e.g. NLopt provides none). Iterated together by position, so
-    each J_i is paired with its own y_i -- no id() keying, no re-iteration.
-
-    Returns the length-num_vars residual vector, or None if any constraint has
-    no dual (residual is undefined without a full multiplier set).
+    Returns the length-num_vars residual vector, or None if any constraint has no dual 
     """
     r = np.zeros(prog.num_vars())
 
-    # cost gradient part: grad f
-    for b in prog.GetAllCosts():
-        idx = prog.FindDecisionVariableIndices(b.variables())
+    # grad f
+    for b in prog.GetAllCosts(): 
+        idx = prog.FindDecisionVariableIndices(b.variables())   # vector of decision var indices
         r[idx] += ExtractGradient(b.evaluator().Eval(InitializeAutoDiff(x[idx])))[0]
 
     # constraint-force part: - sum_i J_i^T y_i, paired by position
@@ -133,7 +127,7 @@ def build_solve_tables(
         try:
             duals.append(np.atleast_1d(result.GetDualSolution(b)))  # pydrake
         except Exception:
-            duals.append(None)   # e.g. NLopt: no duals
+            duals.append(None)
 
     if not np.all(np.isfinite(x)):
         logger.warning(
@@ -141,12 +135,20 @@ def build_solve_tables(
             solver_name, scenario_id, seed, orientation_tol,
         )
         rec = SolveRecord(
-            solve_id=solve_id, scenario_id=scenario_id, seed=seed,
-            orientation_tol=orientation_tol, solver_name=solver_name,
+            solve_id=solve_id, 
+            cenario_id=scenario_id, 
+            seed=seed,
+            orientation_tol=orientation_tol, 
+            solver_name=solver_name,
             generation_method=generation_method,
-            success=False, solution_result=str(result.get_solution_result()),
-            optimal_cost=np.nan, evaluated_cost=np.nan, feasible=False,
-            max_violation=np.nan, common_residual_inf=None, common_residual_2=None,
+            success=False, 
+            solution_result=str(result.get_solution_result()),
+            optimal_cost=np.nan, 
+            evaluated_cost=np.nan, 
+            feasible=False,
+            max_violation=np.nan, 
+            common_residual_inf=None, 
+            common_residual_2=None,
             native_optimality=native_optimality,
             q=x,
             error_type="NonFiniteSolution",

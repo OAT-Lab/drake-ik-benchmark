@@ -8,7 +8,7 @@ reads raw record tables and makes comp for each pair
   both_feasible:                both solves feasible (solver-blind)
   same_q:                       q_diff_inf < q_same_tol
 
-Output: pairwise.csv (one row per scenario x solver pair)
+Output: pairwise.csv (row is scenario x pair)
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ def _load_config(path):
 
 
 def _reconstruct_q(joints_df):
-    """Map solve_id -> q vector
+    """Map solve_id to q vector
 
     Returns {solve_id: q} with joints in ascending index order.
     """

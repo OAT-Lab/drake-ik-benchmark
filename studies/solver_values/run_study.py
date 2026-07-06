@@ -46,9 +46,9 @@ def _load_config(path):
 
 
 def _solver_options(solver_id, solver_name, cfg):
-    """Pinned shared tolerances + NLopt caps. Mapped onto each solver's keys."""
+    """Pinned shared tolerances + NLopt caps."""
     opts = SolverOptions()
-    tol = cfg["tolerances"]
+    tol = cfg["tolerances"]     # from config.yaml
     feas, optm, iters = tol["feasibility_tol"], tol["optimality_tol"], tol["major_iter_limit"]
 
     if solver_name == "SNOPT":
@@ -59,13 +59,13 @@ def _solver_options(solver_id, solver_name, cfg):
         opts.SetOption(solver_id, "constr_viol_tol", feas)
         opts.SetOption(solver_id, "tol", optm)
         opts.SetOption(solver_id, "max_iter", iters)
-        opts.SetOption(solver_id, "acceptable_iter", 0)
+        opts.SetOption(solver_id, "acceptable_iter", 0)     # no acceptable soln, only desired
     elif solver_name == "NLopt":
         n = cfg["nlopt"]
-        opts.SetOption(solver_id, NloptSolver.AlgorithmName(), "LD_SLSQP")
-        opts.SetOption(solver_id, NloptSolver.ConstraintToleranceName(), feas)   # feasibility stays pinned
-        opts.SetOption(solver_id, NloptSolver.XRelativeToleranceName(), 1e-8)    # tight step tol, NOT `optm`
-        opts.SetOption(solver_id, NloptSolver.MaxEvalName(), n["max_eval"])      # Bucket 3: keep this generous
+        opts.SetOption(solver_id, NloptSolver.AlgorithmName(), "LD_SLSQP")      # default for nlopt but safety net
+        opts.SetOption(solver_id, NloptSolver.ConstraintToleranceName(), feas)  
+        opts.SetOption(solver_id, NloptSolver.XRelativeToleranceName(), 1e-8)  
+        opts.SetOption(solver_id, NloptSolver.MaxEvalName(), n["max_eval"])      
         opts.SetOption(solver_id, NloptSolver.MaxTimeName(), n["max_time_sec"])
     return opts
 
