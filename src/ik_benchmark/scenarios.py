@@ -78,24 +78,25 @@ def generate_scenarios(
 ):
     """produce list of Scenario objects
 
-    Parameters: 
-    plant, plant_context, gripper_frame
-        From build_plant(); used for joint limits and forward kinematics.
-    q0 : np.ndarray
-        The nominal/comfortable posture, attached to every scenario.
-    n : int
-        Total number of scenarios.
-    base_seed : int
-        Master seed; each scenario's own seed derives from it deterministically.
-    method_mix : dict
-        e.g. {"joint_space": 0.5, "task_space": 0.5}; fractions must sum to 1.0.
-    task_space_params : dict
-        {"position_min": [x, y, z], "position_max": [x, y, z],
-         "max_tilt_rad": float}.
+    Args: 
+        plant, plant_context, gripper_frame
+            From build_plant(), used for joint limits and forward kinematics.
+        q0 : np.ndarray
+            The nominal/comfortable posture, attached to every scenario.
+        n : int
+            Total number of scenarios.
+        base_seed : int
+            Master seed; each scenario's own seed derives from it deterministically.
+        method_mix : dict
+            e.g. {"joint_space": 0.5, "task_space": 0.5} 
+            fractions must sum to 1.0
+        task_space_params : dict
+            {"position_min": [x, y, z], "position_max": [x, y, z],
+            "max_tilt_rad": float}
 
     Returns: 
-    list[Scenario]
-        Same base_seed always yields the identical list.
+        list[Scenario]
+            Same base_seed always yields the identical list.
     """
     # check params
     expected_keys = {"joint_space", "task_space"}

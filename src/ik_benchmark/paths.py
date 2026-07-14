@@ -1,4 +1,5 @@
-"""Filesystem path helpers for benchmark runs
+"""
+filesystem path helpers for benchmark runs
 """
 
 from __future__ import annotations
@@ -12,7 +13,8 @@ def make_timestamped_run_dir(
     *,
     now: datetime | None = None,
 ) -> Path:
-    """Create and return a new timestamped run directory
+    """
+    create and return a new timestamped run directory
 
     Produces <out_dir>/runs/<YYYY-MM-DD_HHMMSS>/
     
@@ -30,7 +32,8 @@ def make_timestamped_run_dir(
 
 
 def resolve_log_file(log_file: str | Path | None, base_dir: str | Path) -> Path | None:
-    """Resolve a configured log-file path against an output directory
+    """
+    resolve a configured log-file path against an output directory
 
     Absolute paths unchanged
     Relative paths put under base_dir

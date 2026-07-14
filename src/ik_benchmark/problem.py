@@ -2,9 +2,9 @@
 Build a Drake MathematicalProgram from a Scenario.
 
 Encodes a Scenario into Drake's InverseKinematics
-(position constraint, orientation constraint, mindistlowerbound, quadratic error cost). 
+(position constraint, orientation constraint, mindistlowerbound, quadratic error cost)
 
-- Separate from scenario generation so the abstract problem description and its
+Separate from scenario generation so the abstract problem description and its
 Drake encoding can change independently.
 """
 
@@ -17,29 +17,29 @@ from pydrake.multibody.inverse_kinematics import InverseKinematics
 
 
 def build_ik_prog(
-    plant, plant_context, gripper_frame, scenario,
+    plant, plant_context, gripper_frame, 
+    scenario,
     orientation_tol,
     use_minimum_distance,
     min_distance_bound,
     influence_distance_offset
 ):
-    """Construct the IK MathematicalProgram for one scenario.
+    """
+    construct the IK MathematicalProgram for one scenario.
 
-    Parameters:
-    plant, plant_context, gripper_frame
-        From build_plant().
-    scenario : Scenario
-        Supplies target_position, target_orientation, and q0.
-    orientation_tol : float
-        Angular tolerance (radians) on the orientation constraint.
-    use_minimum_distance : bool
-        Whether to add the collision-avoidance constraint. Requires the plant to
-        have collision geometry registered with a SceneGraph.
-    min_distance_bound : float
-        d_min: minimum allowed signed distance between geometry pairs.
-    influence_distance_offset : float
-        Influence distance offset; pairs farther than this are ignored. Must be
-        > min_distance_bound.
+    Args:
+        plant, plant_context, gripper_frame: from build_plant()
+        scenario: Scenario
+            Supplies target_position, target_orientation, and q0.
+        orientation_tol : float
+            Angular tolerance (radians) on the orientation constraint.
+        use_minimum_distance : bool
+            Whether to add the collision-avoidance constraint
+        min_distance_bound : float
+            d_min: minimum allowed signed distance between geometry pairs.
+        influence_distance_offset : float
+            Influence distance offset; pairs farther than this are ignored. 
+            Needs > min_distance_bound
 
     Returns:
     (prog, q)

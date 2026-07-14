@@ -5,8 +5,8 @@ Returns potential solvers:
     - available (present and licensed in this Drake build) 
     - capable (able to represent the prog's non-convex nonlinear constraints). 
 
-The set is enumerated from Drake rather than hardcoded. Also builds
-one shared SolverOptions for same tolerances.
+The set is enumerated from Drake rather than hardcoded. 
+Also builds one shared SolverOptions for same tolerances.
 """
 
 from __future__ import annotations

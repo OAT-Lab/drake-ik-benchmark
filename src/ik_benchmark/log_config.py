@@ -1,4 +1,5 @@
-"""Logging config for the ik_benchmark package.
+"""
+logging config for the ik_benchmark package.
 """
 
 from __future__ import annotations
@@ -21,7 +22,8 @@ def configure_logging(
     quiet: bool = False,
     stream: TextIO | None = None,
 ) -> logging.Logger:
-    """Configure the ik_benchmark package logger and return it
+    """
+    configure benchmark logger + return
 
     Args:
         level: minimum level, name or int 
@@ -31,7 +33,7 @@ def configure_logging(
         stream: console stream for the console handler (default stderr)
 
     Returns:
-        The configured ik_benchmark logger
+        ik_benchmark logger
     """
     if mode not in {"w", "a"}:
         raise ValueError(f"log mode must be 'w' or 'a', got {mode!r}")
@@ -69,7 +71,7 @@ def configure_logging(
 
 
 def _resolve_level(level: str | int) -> int:
-    """Turn a level name/int into a logging level int, or raise"""
+    """turn a level name/int into a logging level int, or raise"""
     if isinstance(level, int):
         return level
 
