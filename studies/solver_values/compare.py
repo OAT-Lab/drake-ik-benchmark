@@ -5,10 +5,11 @@ reads raw record tables and makes comp for each pair
   q_diff_inf, q_diff_2:         how far apart the returned joint vectors are
   cost_diff_abs, cost_diff_rel: difference in solver-blind objective
   common_residual_inf_diff:     difference in stationarity of each returned point
+  time_a, time_b, time_ratio:   median solve time per solver, and a / b
   both_feasible:                both solves feasible (solver-blind)
   same_q:                       q_diff_inf < q_same_tol
 
-Output: pairwise.csv (row is scenario x pair)
+Output: pairwise.csv (row is scenario x pair), written into the same run dir.
 """
 
 from __future__ import annotations
@@ -26,12 +27,23 @@ from ik_benchmark.log_config import configure_logging
 logger = logging.getLogger(__name__)
 
 CONFIG_PATH = Path(__file__).parent / "config.yaml"
-RESULTS_DIR = Path(__file__).parent / "results"
+RESULTS_ROOT = Path(__file__).parent / "results"
 
 
 def _load_config(path):
     with open(path) as f:
         return yaml.safe_load(f)
+
+
+def _run_dir():
+    """The run to compare: results/latest if present, else newest timestamp dir."""
+    latest = RESULTS_ROOT / "latest"
+    if latest.exists():
+        return latest.resolve()
+    runs = [p for p in RESULTS_ROOT.iterdir() if p.is_dir()]
+    if not runs:
+        raise FileNotFoundError(f"no run directories under {RESULTS_ROOT}")
+    return max(runs, key=lambda p: p.stat().st_mtime)
 
 
 def _reconstruct_q(joints_df):
@@ -63,6 +75,13 @@ def _residual_diff(ra, rb):
     return abs(float(ra) - float(rb))
 
 
+def _time_ratio(ta, tb):
+    """ta / tb, or nan if either is missing/non-finite/zero."""
+    if pd.isna(ta) or pd.isna(tb) or not np.isfinite(ta) or not np.isfinite(tb) or tb == 0:
+        return np.nan
+    return float(ta) / float(tb)
+
+
 def build_pairwise(solves_df, joints_df, q_same_tol):
     """One row per (scenario, unordered solver-pair) with diff/agreement columns."""
     qvec = _reconstruct_q(joints_df)
@@ -83,6 +102,9 @@ def build_pairwise(solves_df, joints_df, q_same_tol):
             cost_abs = abs(a["evaluated_cost"] - b["evaluated_cost"])
             denom = max(1.0, abs(a["evaluated_cost"]), abs(b["evaluated_cost"]))
 
+            time_a = a.get("time_median", np.nan)
+            time_b = b.get("time_median", np.nan)
+
             rows.append({
                 "scenario_id": scenario_id,
                 "seed": a["seed"],
@@ -99,6 +121,9 @@ def build_pairwise(solves_df, joints_df, q_same_tol):
                 "common_residual_inf_diff": _residual_diff(
                     a["common_residual_inf"], b["common_residual_inf"]
                 ),
+                "time_a": time_a,
+                "time_b": time_b,
+                "time_ratio": _time_ratio(time_a, time_b),
                 "feasible_a": bool(a["feasible"]),
                 "feasible_b": bool(b["feasible"]),
                 "both_feasible": bool(a["feasible"] and b["feasible"]),
@@ -110,21 +135,24 @@ def build_pairwise(solves_df, joints_df, q_same_tol):
 
 def main():
     cfg = _load_config(CONFIG_PATH)
+    run_dir = _run_dir()
+
     log = cfg["logging"]
     configure_logging(
         level=log["level"],
-        log_file=RESULTS_DIR / log["file"],
+        log_file=run_dir / log["file"],
         mode="a",  # append: compare runs after run_study, same log
         quiet=log["quiet"],
     )
+    logger.info("comparing run: %s", run_dir)
 
-    solves = pd.read_csv(RESULTS_DIR / "solves.csv")
-    joints = pd.read_csv(RESULTS_DIR / "joints.csv")
+    solves = pd.read_csv(run_dir / "solves.csv")
+    joints = pd.read_csv(run_dir / "joints.csv")
     logger.info("loaded %d solves, %d joint rows", len(solves), len(joints))
 
     pairwise = build_pairwise(solves, joints, cfg["compare"]["q_same_tol"])
-    pairwise.to_csv(RESULTS_DIR / "pairwise.csv", index=False)
-    logger.info("wrote %d pairwise rows to %s", len(pairwise), RESULTS_DIR / "pairwise.csv")
+    pairwise.to_csv(run_dir / "pairwise.csv", index=False)
+    logger.info("wrote %d pairwise rows to %s", len(pairwise), run_dir / "pairwise.csv")
 
 
 if __name__ == "__main__":
