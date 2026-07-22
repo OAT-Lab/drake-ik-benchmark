@@ -1,7 +1,23 @@
-"""native optimality extraction from solver print files.
+"""native optimality extraction from solver print files, plus print-quieting
+for the timed pass.
 
-For SNOPT/IPOPT: make the solver write its optimality line to a temp file and
-parse it back. 
+Two flavors of options, because printing and timing are incompatible:
+
+  quiet_options()             ALL printing off -- no print file, no console.
+                              The timed pass MUST use this.  SNOPT writes a
+                              line per major iteration to its print file (~48 KB
+                              over ~110 majors), interleaved inside the region
+                              being timed; IPOPT writes its iteration summary to
+                              the console by default.  Timing either measures
+                              the filesystem, and does so ASYMMETRICALLY --
+                              SNOPT's dump dwarfs IPOPT's ~1.6 KB, biasing
+                              exactly the comparison this study exists to make.
+
+  native_optimality_options() print file ON, console off.  One solve per row,
+                              purely to harvest native_optimality.
+
+Both MUTATE and return the SolverOptions handed to them, so give each its own
+freshly built base rather than sharing one object.
 """
 
 import os
@@ -15,6 +31,25 @@ _SNOPT_DUAL_RE = re.compile(r"Max Dual infeas\s+\d+\s+([0-9.eE+\-]+)")
 _IPOPT_DUAL_RE = re.compile(
     r"Dual infeasibility\.+:\s+([0-9.eE+\-]+)\s+([0-9.eE+\-]+)"
 )
+
+
+def quiet_options(solver_name, base_options=None):
+    """Return SolverOptions with every print path disabled.
+
+    Used by the timed pass.  Numerics are unaffected -- only I/O changes -- so
+    the solve this measures is the same solve the recording pass records.
+    """
+    opts = base_options or SolverOptions()
+
+    if solver_name in ("Ipopt", "IPOPT"):
+        sid = _ipopt_id()
+        opts.SetOption(sid, "print_level", 0)  # console off (default is 5!)
+        opts.SetOption(sid, "sb", "yes")       # suppress the startup banner
+    # SNOPT prints only to kPrintFileName; leaving it unset means no file and
+    # nothing on the console.
+    # NLopt does not print at all.
+
+    return opts
 
 
 def native_optimality_options(solver_name, base_options=None):
@@ -33,7 +68,7 @@ def native_optimality_options(solver_name, base_options=None):
     elif solver_name in ("Ipopt", "IPOPT"):
         sid = _ipopt_id()
         opts.SetOption(sid, "output_file", path)     # ipopt-native file
-        opts.SetOption(sid, "file_print_level", 5)   
+        opts.SetOption(sid, "file_print_level", 5)
         opts.SetOption(sid, "print_level", 0)        # console off
         opts.SetOption(sid, "sb", "yes")             # suppress the startup banner
     return opts, path

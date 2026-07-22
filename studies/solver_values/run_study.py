@@ -3,19 +3,31 @@
 Per (seed, orientation_tol): build the prog, generate n_per_cell scenarios,
 solve every available solver from the same initial guess (scenario.q0)
 
-Outputs (under results_dir):
+Each (scenario, solver) is two passes: one recorded solve with the print file
+on, then n_warmup + n_repeats timed solves with printing off. SNOPT writes a
+line per major iteration; timing a printing solve measures the filesystem.
+
+Outputs (under results/<timestamp>/, with results/latest symlinked to it):
   solves.csv       one row per (scenario, solver)
   joints.csv       one row per (solve, joint)
   constraints.csv  one row per (solve, constraint row)
+  timings.csv      one row per (solve, timed repeat)
+  config.yaml      the config this run used
+  provenance.txt   which pydrake ran it
 """
 
 from __future__ import annotations
 
 import logging
+import shutil
+import time
 from dataclasses import asdict
+from datetime import datetime
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
+import pydrake
 import yaml
 from pydrake.solvers import (
     GetAvailableSolvers,
@@ -31,13 +43,18 @@ from ik_benchmark.plant import build_plant
 from ik_benchmark.problem import build_ik_prog
 from ik_benchmark.scenarios import generate_scenarios
 
-from record import build_solve_tables
-from solver_opt import native_optimality_options, parse_native_optimality
+from record import SolveRecord, build_solve_tables
+from solver_opt import (
+    native_optimality_options,
+    parse_native_optimality,
+    quiet_options,
+)
 
 logger = logging.getLogger(__name__)
 
 CONFIG_PATH = Path(__file__).parent / "config.yaml"
-RESULTS_DIR = Path(__file__).parent / "results"
+RESULTS_ROOT = Path(__file__).parent / "results"
+RESULTS_DIR = RESULTS_ROOT / datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
 def _load_config(path):
@@ -45,8 +62,29 @@ def _load_config(path):
         return yaml.safe_load(f)
 
 
+def _init_results_dir():
+    """Timestamped dir + a latest symlink so downstream paths stay fixed."""
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+
+    latest = RESULTS_ROOT / "latest"
+    latest.unlink(missing_ok=True)
+    latest.symlink_to(RESULTS_DIR.name)
+
+    try:
+        from importlib.metadata import version
+        drake_version = version("drake")
+    except Exception:
+        drake_version = "source build (no dist metadata)"
+
+    (RESULTS_DIR / "provenance.txt").write_text(
+        f"pydrake: {pydrake.__file__}\n"
+        f"version: {drake_version}\n"
+        f"run: {datetime.now().isoformat()}\n"
+    )
+
+
 def _solver_options(solver_id, solver_name, cfg):
-    """Pinned shared tolerances + NLopt caps."""
+    """Pinned shared tolerances + NLopt caps. Fresh object per call."""
     opts = SolverOptions()
     tol = cfg["tolerances"]     # from config.yaml
     feas, optm, iters = tol["feasibility_tol"], tol["optimality_tol"], tol["major_iter_limit"]
@@ -63,11 +101,35 @@ def _solver_options(solver_id, solver_name, cfg):
     elif solver_name == "NLopt":
         n = cfg["nlopt"]
         opts.SetOption(solver_id, NloptSolver.AlgorithmName(), "LD_SLSQP")      # default for nlopt but safety net
-        opts.SetOption(solver_id, NloptSolver.ConstraintToleranceName(), feas)  
-        opts.SetOption(solver_id, NloptSolver.XRelativeToleranceName(), 1e-8)  
-        opts.SetOption(solver_id, NloptSolver.MaxEvalName(), n["max_eval"])      
+        opts.SetOption(solver_id, NloptSolver.ConstraintToleranceName(), feas)
+        opts.SetOption(solver_id, NloptSolver.XRelativeToleranceName(), 1e-8)
+        opts.SetOption(solver_id, NloptSolver.MaxEvalName(), n["max_eval"])
         opts.SetOption(solver_id, NloptSolver.MaxTimeName(), n["max_time_sec"])
     return opts
+
+
+def _timed_solve(solver, prog, q0, opts_timed, n_warmup, n_repeats):
+    """Wall clock of Solve() alone. Returns (times, last result)."""
+    for _ in range(n_warmup):
+        solver.Solve(prog, q0, opts_timed)
+
+    times = np.empty(n_repeats)
+    result = None
+    for i in range(n_repeats):
+        t0 = time.perf_counter()
+        result = solver.Solve(prog, q0, opts_timed)
+        times[i] = time.perf_counter() - t0
+
+    return times, result
+
+
+def _same_solution(qa, qb, atol=1e-12):
+    """Did the timed and recorded passes land on the same point? NaN-aware."""
+    qa, qb = np.asarray(qa), np.asarray(qb)
+    if qa.shape != qb.shape:
+        return False
+    both_nan = ~np.isfinite(qa) & ~np.isfinite(qb)
+    return bool(np.all(both_nan | np.isclose(qa, qb, rtol=0, atol=atol)))
 
 
 def _solve_row(solve_record):
@@ -79,7 +141,7 @@ def _solve_row(solve_record):
 
 def main():
     cfg = _load_config(CONFIG_PATH)
-    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    _init_results_dir()
 
     log = cfg["logging"]
     configure_logging(
@@ -92,12 +154,15 @@ def main():
     feas_threshold = cfg["compare"]["feasibility_threshold"]
     box = cfg["box"]
     time_step = cfg["time_step"]
+    n_warmup = cfg["timing"]["n_warmup"]
+    n_repeats = cfg["timing"]["n_repeats"]
 
-    solve_rows, joint_rows, constraint_rows = [], [], []
+    solve_rows, joint_rows, constraint_rows, timing_rows = [], [], [], []
     scenario_counter = 0
 
-    logger.info("study start: %d seeds x %d tols x %d scenarios",
-                len(cfg["seeds"]), len(cfg["orientation_tols"]), cfg["n_per_cell"])
+    logger.info("study start: %d seeds x %d tols x %d scenarios (%d+%d+1 solves per row)",
+                len(cfg["seeds"]), len(cfg["orientation_tols"]), cfg["n_per_cell"],
+                n_warmup, n_repeats)
 
     for seed in cfg["seeds"]:
         for orientation_tol in cfg["orientation_tols"]:
@@ -129,45 +194,52 @@ def main():
                     solve_id = f"{seed}_{orientation_tol}_{scenario_id}_{solver_name}"
 
                     logger.debug("solve %s", solve_id)
-                    base_opts = _solver_options(sid, solver_name, cfg)
-                    opts, print_path = native_optimality_options(solver_name, base_opts)
                     try:
-                        result = solver.Solve(prog, scenario.q0, opts)
+                        # recorded pass: print file on
+                        opts_record, print_path = native_optimality_options(
+                            solver_name, _solver_options(sid, solver_name, cfg))
+                        result = solver.Solve(prog, scenario.q0, opts_record)
+                        native_opt = parse_native_optimality(solver_name, print_path)
+
+                        # timed pass: printing off
+                        opts_timed = quiet_options(
+                            solver_name, _solver_options(sid, solver_name, cfg))
+                        times, timed_result = _timed_solve(
+                            solver, prog, scenario.q0, opts_timed, n_warmup, n_repeats)
+
+                        matches = _same_solution(timed_result.get_x_val(),
+                                                 result.get_x_val())
+                        if not matches:
+                            logger.warning("timed != recorded solve %s", solve_id)
+
                     except Exception as exc:  # noqa: BLE001 - record and continue
                         logger.exception("solver raised %s", solve_id)
-                        solve_rows.append({
-                            "solve_id": solve_id, 
-                            "scenario_id": scenario_id,
-                            "seed": seed, 
-                            "orientation_tol": orientation_tol,
-                            "solver_name": solver_name,
-                            "generation_method": scenario.generation_method, 
-                            "success": False,
-                            "solution_result": None, 
-                            "optimal_cost": float("nan"),
-                            "evaluated_cost": float("nan"), 
-                            "feasible": False,
-                            "max_violation": float("nan"),
-                            "common_residual_inf": None, 
-                            "common_residual_2": None,
-                            "native_optimality": None,
-                            "error_type": type(exc).__name__, 
-                            "error_message": str(exc),
-                        })
+                        solve_rows.append(_solve_row(SolveRecord.failure(
+                            solve_id=solve_id,
+                            scenario_id=scenario_id,
+                            seed=seed,
+                            orientation_tol=orientation_tol,
+                            solver_name=solver_name,
+                            generation_method=scenario.generation_method,
+                            error_type=type(exc).__name__,
+                            error_message=str(exc),
+                        )))
                         continue
 
-                    native_opt = parse_native_optimality(solver_name, print_path)
                     tables = build_solve_tables(
                         prog, result,
                         solve_id=solve_id, scenario_id=scenario_id, seed=seed,
                         orientation_tol=orientation_tol, solver_name=solver_name,
-                        generation_method=scenario.generation_method, 
+                        generation_method=scenario.generation_method,
                         feasibility_threshold=feas_threshold,
                         native_optimality=native_opt,
+                        times=times,
+                        timing_matches_record=matches,
                     )
                     solve_rows.append(_solve_row(tables.solve))
                     joint_rows.extend(asdict(j) for j in tables.joints)
                     constraint_rows.extend(asdict(c) for c in tables.constraints)
+                    timing_rows.extend(asdict(t) for t in tables.timings)
 
             logger.info("done seed=%s tol=%s (scenarios so far: %d)",
                         seed, orientation_tol, scenario_counter)
@@ -175,8 +247,10 @@ def main():
     pd.DataFrame(solve_rows).to_csv(RESULTS_DIR / "solves.csv", index=False)
     pd.DataFrame(joint_rows).to_csv(RESULTS_DIR / "joints.csv", index=False)
     pd.DataFrame(constraint_rows).to_csv(RESULTS_DIR / "constraints.csv", index=False)
-    logger.info("wrote %d solves, %d joint rows, %d constraint rows to %s",
-                len(solve_rows), len(joint_rows), len(constraint_rows), RESULTS_DIR)
+    pd.DataFrame(timing_rows).to_csv(RESULTS_DIR / "timings.csv", index=False)
+    logger.info("wrote %d solves, %d joint rows, %d constraint rows, %d timing rows to %s",
+                len(solve_rows), len(joint_rows), len(constraint_rows),
+                len(timing_rows), RESULTS_DIR)
 
 
 if __name__ == "__main__":

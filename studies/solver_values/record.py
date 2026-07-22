@@ -4,6 +4,7 @@ flatten one solver result into tables keyed by solve_id:
   solves      - one row per (scenario, solver)
   joints      - one row per (solve, joint)
   constraints - one row per (solve, constraint row)
+  timings     - one row per (solve, timed repeat)
 """
 
 from __future__ import annotations
@@ -36,8 +37,41 @@ class SolveRecord:
     common_residual_2: float | None
     native_optimality: float | None     # from solver
     q: np.ndarray
+    time_median: float = np.nan         # headline; distribution in timings table
+    n_repeats: int = 0
+    timing_matches_record: bool = False
     error_type: str | None = None
     error_message: str | None = None
+
+    @classmethod
+    def failure(cls, *, solve_id, scenario_id, seed, orientation_tol, solver_name,
+                generation_method, error_type, error_message,
+                solution_result=None, native_optimality=None, q=None,
+                time_median=np.nan, n_repeats=0, timing_matches_record=False):
+        """Row for a solve that produced no usable numbers."""
+        return cls(
+            solve_id=solve_id,
+            scenario_id=scenario_id,
+            seed=seed,
+            orientation_tol=orientation_tol,
+            solver_name=solver_name,
+            generation_method=generation_method,
+            success=False,
+            solution_result=solution_result,
+            optimal_cost=np.nan,
+            evaluated_cost=np.nan,
+            feasible=False,
+            max_violation=np.nan,
+            common_residual_inf=None,
+            common_residual_2=None,
+            native_optimality=native_optimality,
+            q=np.full(0, np.nan) if q is None else q,
+            time_median=time_median,
+            n_repeats=n_repeats,
+            timing_matches_record=timing_matches_record,
+            error_type=error_type,
+            error_message=error_message,
+        )
 
 
 @dataclass(frozen=True)
@@ -66,10 +100,18 @@ class ConstraintRecord:
 
 
 @dataclass(frozen=True)
+class TimingRecord:
+    solve_id: str
+    repeat_index: int   # order run; warmups excluded
+    seconds: float
+
+
+@dataclass(frozen=True)
 class SolveTables:
     solve: SolveRecord
     joints: list[JointRecord] = field(default_factory=list)
     constraints: list[ConstraintRecord] = field(default_factory=list)
+    timings: list[TimingRecord] = field(default_factory=list)
 
 
 def _binding_label(binding) -> str:
@@ -80,6 +122,11 @@ def _binding_label(binding) -> str:
 
 def _row_violation(value, lower, upper) -> float:
     return float(max(lower - value, 0.0, value - upper))
+
+
+def _timing_records(solve_id, times):
+    return [TimingRecord(solve_id=solve_id, repeat_index=i, seconds=float(t))
+            for i, t in enumerate(times)]
 
 
 def _stationarity(prog, constraints, duals, x):
@@ -117,9 +164,15 @@ def build_solve_tables(
     generation_method=None,
     feasibility_threshold,
     native_optimality=None,
+    times=None,
+    timing_matches_record=False,
     q_at_limit_tol=1e-9,
 ) -> SolveTables:
     """Flatten one solved prog into the tables."""
+    times = np.asarray([] if times is None else times, dtype=float)
+    time_median = float(np.median(times)) if times.size else np.nan
+    timing_records = _timing_records(solve_id, times)
+
     x = np.asarray(result.GetSolution(prog.decision_variables()), dtype=float)
     constraints = list(prog.GetAllConstraints())            # pydrake
     duals = []
@@ -134,27 +187,23 @@ def build_solve_tables(
             "non-finite solution solver=%s scenario=%s seed=%s tol=%s",
             solver_name, scenario_id, seed, orientation_tol,
         )
-        rec = SolveRecord(
-            solve_id=solve_id, 
-            cenario_id=scenario_id, 
+        rec = SolveRecord.failure(
+            solve_id=solve_id,
+            scenario_id=scenario_id,
             seed=seed,
-            orientation_tol=orientation_tol, 
+            orientation_tol=orientation_tol,
             solver_name=solver_name,
             generation_method=generation_method,
-            success=False, 
             solution_result=str(result.get_solution_result()),
-            optimal_cost=np.nan, 
-            evaluated_cost=np.nan, 
-            feasible=False,
-            max_violation=np.nan, 
-            common_residual_inf=None, 
-            common_residual_2=None,
             native_optimality=native_optimality,
             q=x,
+            time_median=time_median,
+            n_repeats=int(times.size),
+            timing_matches_record=timing_matches_record,
             error_type="NonFiniteSolution",
             error_message=f"{int((~np.isfinite(x)).sum())} non-finite entries",
         )
-        return SolveTables(solve=rec)
+        return SolveTables(solve=rec, timings=timing_records)   # time-to-NaN is still data
 
     # solver-blind cost
     evaluated_cost = 0.0
@@ -232,8 +281,12 @@ def build_solve_tables(
         common_residual_inf=res_inf, common_residual_2=res_2,
         native_optimality=native_optimality,
         q=x,
+        time_median=time_median,
+        n_repeats=int(times.size),
+        timing_matches_record=timing_matches_record,
     )
-    return SolveTables(solve=rec, joints=joint_records, constraints=constraint_records)
+    return SolveTables(solve=rec, joints=joint_records,
+                       constraints=constraint_records, timings=timing_records)
 
 
 def _joint_bounds_and_duals(prog, constraints, duals):
