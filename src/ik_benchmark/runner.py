@@ -94,7 +94,7 @@ def run_one(
         if not matches:
             logger.warning("timed != recorded solve %s", solve_id)
 
-    except Exception as exc:  # noqa: BLE001 - record and continue
+    except Exception as exc:  
         logger.exception("solver raised %s", solve_id)
         return SolveTables(solve=SolveRecord.failure(
             solve_id=solve_id,
