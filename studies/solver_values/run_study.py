@@ -20,35 +20,21 @@ from __future__ import annotations
 
 import logging
 import shutil
-import time
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import pydrake
 import yaml
-from pydrake.solvers import (
-    GetAvailableSolvers,
-    GetProgramType,
-    MakeSolver,
-    NloptSolver,
-    SolverOptions,
-    CommonSolverOption,
-)
 
 from ik_benchmark.log_config import configure_logging
 from ik_benchmark.plant import build_plant
 from ik_benchmark.problem import build_ik_prog
+from ik_benchmark.results import solve_row
+from ik_benchmark.runner import run_one
 from ik_benchmark.scenarios import generate_scenarios
-
-from record import SolveRecord, build_solve_tables
-from solver_opt import (
-    native_optimality_options,
-    parse_native_optimality,
-    quiet_options,
-)
+from ik_benchmark.solvers import get_candidate_solvers
 
 logger = logging.getLogger(__name__)
 
@@ -81,62 +67,6 @@ def _init_results_dir():
         f"version: {drake_version}\n"
         f"run: {datetime.now().isoformat()}\n"
     )
-
-
-def _solver_options(solver_id, solver_name, cfg):
-    """Pinned shared tolerances + NLopt caps. Fresh object per call."""
-    opts = SolverOptions()
-    tol = cfg["tolerances"]     # from config.yaml
-    feas, optm, iters = tol["feasibility_tol"], tol["optimality_tol"], tol["major_iter_limit"]
-
-    if solver_name == "SNOPT":
-        opts.SetOption(solver_id, "Major feasibility tolerance", feas)
-        opts.SetOption(solver_id, "Major optimality tolerance", optm)
-        opts.SetOption(solver_id, "Major iterations limit", iters)
-    elif solver_name in ("Ipopt", "IPOPT"):
-        opts.SetOption(solver_id, "constr_viol_tol", feas)
-        opts.SetOption(solver_id, "tol", optm)
-        opts.SetOption(solver_id, "max_iter", iters)
-        opts.SetOption(solver_id, "acceptable_iter", 0)     # no acceptable soln, only desired
-    elif solver_name == "NLopt":
-        n = cfg["nlopt"]
-        opts.SetOption(solver_id, NloptSolver.AlgorithmName(), "LD_SLSQP")      # default for nlopt but safety net
-        opts.SetOption(solver_id, NloptSolver.ConstraintToleranceName(), feas)
-        opts.SetOption(solver_id, NloptSolver.XRelativeToleranceName(), 1e-8)
-        opts.SetOption(solver_id, NloptSolver.MaxEvalName(), n["max_eval"])
-        opts.SetOption(solver_id, NloptSolver.MaxTimeName(), n["max_time_sec"])
-    return opts
-
-
-def _timed_solve(solver, prog, q0, opts_timed, n_warmup, n_repeats):
-    """Wall clock of Solve() alone. Returns (times, last result)."""
-    for _ in range(n_warmup):
-        solver.Solve(prog, q0, opts_timed)
-
-    times = np.empty(n_repeats)
-    result = None
-    for i in range(n_repeats):
-        t0 = time.perf_counter()
-        result = solver.Solve(prog, q0, opts_timed)
-        times[i] = time.perf_counter() - t0
-
-    return times, result
-
-
-def _same_solution(qa, qb, atol=1e-12):
-    """Did the timed and recorded passes land on the same point? NaN-aware."""
-    qa, qb = np.asarray(qa), np.asarray(qb)
-    if qa.shape != qb.shape:
-        return False
-    both_nan = ~np.isfinite(qa) & ~np.isfinite(qb)
-    return bool(np.all(both_nan | np.isclose(qa, qb, rtol=0, atol=atol)))
-
-
-def _solve_row(solve_record):
-    """SolveRecord -> flat dict for CSV, dropping the q array (q lives in joints table)."""
-    d = asdict(solve_record)
-    d.pop("q", None)
-    return d
 
 
 def main():
@@ -186,57 +116,25 @@ def main():
                     min_distance_bound=cfg["minimum_distance"]["min_distance_bound"],
                     influence_distance_offset=cfg["minimum_distance"]["influence_distance_offset"],
                 )
-                solver_ids = GetAvailableSolvers(GetProgramType(prog))
-                for solver_id in solver_ids:
-                    solver = MakeSolver(solver_id)
+                solvers = get_candidate_solvers(prog)
+                for solver in solvers:
                     solver_name = solver.solver_id().name()
-                    sid = solver.solver_id()
                     solve_id = f"{seed}_{orientation_tol}_{scenario_id}_{solver_name}"
 
-                    logger.debug("solve %s", solve_id)
-                    try:
-                        # recorded pass: print file on
-                        opts_record, print_path = native_optimality_options(
-                            solver_name, _solver_options(sid, solver_name, cfg))
-                        result = solver.Solve(prog, scenario.q0, opts_record)
-                        native_opt = parse_native_optimality(solver_name, print_path)
-
-                        # timed pass: printing off
-                        opts_timed = quiet_options(
-                            solver_name, _solver_options(sid, solver_name, cfg))
-                        times, timed_result = _timed_solve(
-                            solver, prog, scenario.q0, opts_timed, n_warmup, n_repeats)
-
-                        matches = _same_solution(timed_result.get_x_val(),
-                                                 result.get_x_val())
-                        if not matches:
-                            logger.warning("timed != recorded solve %s", solve_id)
-
-                    except Exception as exc:  # noqa: BLE001 - record and continue
-                        logger.exception("solver raised %s", solve_id)
-                        solve_rows.append(_solve_row(SolveRecord.failure(
-                            solve_id=solve_id,
-                            scenario_id=scenario_id,
-                            seed=seed,
-                            orientation_tol=orientation_tol,
-                            solver_name=solver_name,
-                            generation_method=scenario.generation_method,
-                            error_type=type(exc).__name__,
-                            error_message=str(exc),
-                        )))
-                        continue
-
-                    tables = build_solve_tables(
-                        prog, result,
-                        solve_id=solve_id, scenario_id=scenario_id, seed=seed,
-                        orientation_tol=orientation_tol, solver_name=solver_name,
-                        generation_method=scenario.generation_method,
+                    tables = run_one(
+                        prog,
+                        solver,
+                        scenario,
+                        solve_id=solve_id,
+                        scenario_id=scenario_id,
+                        seed=seed,
+                        orientation_tol=orientation_tol,
+                        cfg=cfg,
                         feasibility_threshold=feas_threshold,
-                        native_optimality=native_opt,
-                        times=times,
-                        timing_matches_record=matches,
+                        n_warmup=n_warmup,
+                        n_repeats=n_repeats,
                     )
-                    solve_rows.append(_solve_row(tables.solve))
+                    solve_rows.append(solve_row(tables.solve))
                     joint_rows.extend(asdict(j) for j in tables.joints)
                     constraint_rows.extend(asdict(c) for c in tables.constraints)
                     timing_rows.extend(asdict(t) for t in tables.timings)

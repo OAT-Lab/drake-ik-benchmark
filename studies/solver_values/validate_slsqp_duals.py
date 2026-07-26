@@ -15,7 +15,7 @@ from ik_benchmark.plant import build_plant
 from ik_benchmark.problem import build_ik_prog
 from ik_benchmark.scenarios import generate_scenarios
 
-from record import _stationarity
+from ik_benchmark.measure import _stationarity
 
 TIME_STEP = 0.001
 BOX = {"size": [0.2, 0.2, 0.2], "position": [0.5, 0.0, 0.3]}
