@@ -1,52 +1,50 @@
-# Default benchmark configuration
+# config for producing solver values
 
-# a run is fully described by this file + the pinned Drake version
-# nothing that affects results should live in code instead of here.
-
-# LOGGING
 logging:
-  level: INFO       
-  file: benchmark.log
-  mode: w                 
-  quiet: false             
+  level: INFO
+  file: study.log
+  mode: w
+  quiet: false
 
-# REPRODUCIBILITY
-base_seed: 42
+# benchmark
+seeds: [42]
+orientation_tols: [1.0e-3]
+n_per_cell: 640
 
-# PLANT
+method_mix:
+  joint_space: 0.5
+  task_space: 0.5
+
 time_step: 0.001
-box:                       # collision box, welded to the world
-  size: [0.1, 0.1, 1.0]    # xyz extents (m)
-  position: [0.25, 0.0, 0.5]  # xyz of box center in world (m)
-
-# SCENARIO SET
-n: 100                   # total number of scenarios
-method_mix:              # fraction of scenarios per generation method (must sum to 1.0)
-  joint_space: 0.5       # sample a random q, forward kinematics to a reachable target
-  task_space: 0.5        # sample a pose directly in the workspace (might be unreachable)
-
-# task-space sampling
+box:
+  size: [0.1, 0.1, 1.0]
+  position: [0.25, 0.0, 0.5]
 
 task_space:
   position_min: [0.3, -0.3, 0.2]
   position_max: [0.6, 0.3, 0.6]
-  max_tilt_rad: 0.5          # tilt from nominal downward grasp 
+  max_tilt_rad: 0.5
 
-# CONSTRAINTS
-orientation_tol: 0.0     # radians, 0.0 = exact orientation
+minimum_distance:
+  use_minimum_distance: true
+  min_distance_bound: 0.001
+  influence_distance_offset: 0.1
 
-# SOLVER FAIRNESS
-#   - shared tolerances mapped onto every solver's option keys (see solvers.py)
-#   - pinned for fairness: not defaults
 tolerances:
   feasibility_tol: 1.0e-6
   optimality_tol: 1.0e-6
-major_iter_limit: 100000
+  major_iter_limit: 100000
 
-# MEASUREMENT
-# solver-blind feasibility threshold used by measure.py
-feasibility_threshold: 1.0e-4
+nlopt:
+  max_eval: 100000
+  max_time_sec: 60.0
 
-# TIMING
-n_warmup: 1              # leading solves discarded per (scenario, solver)
-n_repeats: 5             # timed solves averaged over
+# recorded per (scenario, solver):
+# q, objective, constraint values c(x) vs bounds, q vs joint limits
+compare:
+  q_same_tol: 1.0e-3
+  feasibility_threshold: 1.0e-4
+
+timing:
+  n_warmup: 2
+  n_repeats: 10
