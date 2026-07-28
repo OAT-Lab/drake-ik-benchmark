@@ -5,6 +5,8 @@ results/*
 # misc output
 **/results/*
 !**/results/.gitkeep
+*.log
+log/*
 
 # Python
 __pycache__/
@@ -19,6 +21,7 @@ dist/
 .venv/
 venv/
 env/
+venv*/
 
 # OS / editor
 .DS_Store

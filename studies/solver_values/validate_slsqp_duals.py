@@ -27,10 +27,14 @@ def label(binding):
     return type(binding.evaluator()).__name__
 
 
-def solver_options():
+def solver_options(ctol=None, xtol=None):
     opts = SolverOptions()
     opts.SetOption(NloptSolver.id(), NloptSolver.AlgorithmName(), "LD_SLSQP")
     opts.SetOption(NloptSolver.id(), NloptSolver.MaxEvalName(), 100000)
+    if ctol is not None:
+        opts.SetOption(NloptSolver.id(), NloptSolver.ConstraintToleranceName(), ctol)
+    if xtol is not None:
+        opts.SetOption(NloptSolver.id(), NloptSolver.XRelativeToleranceName(), xtol)
     return opts
 
 
@@ -119,7 +123,17 @@ def main():
 
         print(f"  scenario id={scenario.id} seed={scenario.seed}")
 
+        for ctol in (None, 1e-4, 1e-6, 1e-9, 1e-12):
+            for xtol in (None, 1e-6, 1e-8, 1e-10):
+                print(f"\n  --- ctol={ctol} xtol={xtol}", flush=True)
+                r = solvers["NLopt"].Solve(prog, scenario.q0,
+                                           solver_options(ctol, xtol))
+                print(f"      finite={np.all(np.isfinite(r.GetSolution(q)))} "
+                      f"status={r.get_solver_details().status}", flush=True)
+                
         for name, solver in solvers.items():
+            if not solver.available(): 
+                continue
             result = solver.Solve(prog, scenario.q0, opts)
             constraints, duals = collect_duals(prog, result)
             report(name, prog, result, constraints, duals)
