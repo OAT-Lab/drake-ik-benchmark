@@ -104,6 +104,12 @@ def report(name, prog, result, constraints, duals):
     c_sub = [b for b, k in zip(constraints, keep) if k]
     d_sub = [d for d, k in zip(duals, keep) if k]
 
+    pos_i = next((i for i, b in enumerate(c_sub) if label(b) == "PositionConstraint"), None)
+    if pos_i is not None and d_sub[pos_i] is not None:
+        d_flip = [None if d is None else d.copy() for d in d_sub]
+        d_flip[pos_i][1] *= -1
+        logger.info("    residual_flip1   = %s", _stationarity(prog, c_sub, d_flip, x))
+        
     logger.info("    q     = %s", x)
     for b, y in zip(constraints, duals):
         if y is not None:
