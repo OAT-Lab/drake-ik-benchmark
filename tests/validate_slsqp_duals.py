@@ -60,6 +60,15 @@ def solver_options(ctol=None, xtol=None):
         opts.SetOption(NloptSolver.id(), NloptSolver.XRelativeToleranceName(), xtol)
     return opts
 
+def find_joint_limit_bbox(prog):
+    for b in prog.bounding_box_constraints():
+        if b.evaluator().get_description() == "Joint limits":
+            return b
+    # fallback: the bbox spanning all decision vars
+    for b in prog.bounding_box_constraints():
+        if b.evaluator().num_constraints() == prog.num_vars():
+            return b
+    return None
 
 def collect_duals(prog, result):
     """One GetAllConstraints() call, duals aligned by position."""
@@ -167,6 +176,47 @@ def main():
             continue
 
         logger.info("  scenario id=%s seed=%s", scenario.id, scenario.seed)
+        # active-bound sign check
+        # --- active-bound sign check -----------------------------------
+        base = solvers["NLopt"].Solve(prog, scenario.q0, opts)
+        q_star = base.GetSolution(q)
+        bbox = find_joint_limit_bbox(prog)
+        if np.all(np.isfinite(q_star)) and bbox is not None:
+            j = 0
+            lb0 = bbox.evaluator().lower_bound().copy()
+            ub0 = bbox.evaluator().upper_bound().copy()
+
+            lb_new = lb0.copy()
+            lb_new[j] = q_star[j] + 5e-3          # pin lower bound above desired
+            bbox.evaluator().set_bounds(lb_new, ub0)
+
+            logger.info("\n  === ACTIVE-BOUND CHECK: joint %d lower pinned to %.6f "
+                        "(wants %.6f) ===", j, lb_new[j], q_star[j])
+
+            results_by_solver = {}
+            for name in ("Ipopt", "NLopt"):
+                seed = scenario.q0
+                if name == "NLopt" and "Ipopt" in results_by_solver:
+                    iq = results_by_solver["Ipopt"].GetSolution(q)
+                    if np.all(np.isfinite(iq)):
+                        seed = iq          # warm-start NLopt from IPOPT's solution
+                r = solvers[name].Solve(prog, seed, opts)
+                results_by_solver[name] = r
+                cons, duals = collect_duals(prog, r)
+                qv = r.GetSolution(q)
+                bidx = next(i for i, b in enumerate(cons)
+                            if label(b) == "BoundingBoxConstraint")
+                bd = duals[bidx]
+                at_bound = (np.all(np.isfinite(qv)) and
+                            abs(qv[j] - lb_new[j]) < 1e-4)
+                logger.info("    %-6s success=%s q[%d]=%.6f at_bound=%s bbox_dual[%d]=%s",
+                            name, r.is_success(), j,
+                            qv[j] if np.all(np.isfinite(qv)) else float("nan"),
+                            at_bound, j,
+                            "MISSING" if bd is None else f"{bd[j]:+.5f}")
+
+            bbox.evaluator().set_bounds(lb0, ub0)  # restore
+        # ---------------------------------------------------------------
 
         for ctol in (None, 1e-4, 1e-6, 1e-9, 1e-12):
             for xtol in (None, 1e-6, 1e-8, 1e-10):
