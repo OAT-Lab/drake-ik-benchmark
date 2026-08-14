@@ -31,20 +31,20 @@ def build_ik_prog(
         plant, plant_context, gripper_frame: from build_plant()
         scenario: Scenario
             Supplies target_position, target_orientation, and q0.
-        orientation_tol : float
+        orientation_tol: float
             Angular tolerance (radians) on the orientation constraint.
-        use_minimum_distance : bool
+        use_minimum_distance: bool
             Whether to add the collision-avoidance constraint
-        min_distance_bound : float
+        min_distance_bound: float
             d_min: minimum allowed signed distance between geometry pairs.
-        influence_distance_offset : float
+        influence_distance_offset: float
             Influence distance offset; pairs farther than this are ignored. 
             Needs > min_distance_bound
 
     Returns:
     (prog, q)
-        prog : MathematicalProgram
-        q : decision-variable vector (for setting the initial guess)
+        prog: MathematicalProgram
+        q: decision-variable vector (for setting the initial guess)
     """
     if use_minimum_distance: 
         if min_distance_bound >= influence_distance_offset: 

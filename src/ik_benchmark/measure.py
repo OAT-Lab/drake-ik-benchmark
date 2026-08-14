@@ -22,19 +22,19 @@ def _row_violation(value, lower, upper) -> float:
 def _stationarity(prog, constraints, duals, x):
     """grad f - sum_i J_i^T y_i  at x
 
-    Returns the length-num_vars residual vector, or None if any constraint has no dual 
+    Returns the length-num_vars stationarity vector, or None if any constraint has no dual 
     """
     r = np.zeros(prog.num_vars())
 
     # grad f
     for b in prog.GetAllCosts(): 
         idx = prog.FindDecisionVariableIndices(b.variables())   # vector of decision var indices
-        r[idx] += ExtractGradient(b.evaluator().Eval(InitializeAutoDiff(x[idx])))[0]
+        r[idx] += ExtractGradient(b.evaluator().Eval(InitializeAutoDiff(x[idx])))[0] 
 
     # constraint-force part: - sum_i J_i^T y_i, paired by position
     for b, y in zip(constraints, duals, strict=True):
         if y is None:
-            return None      # missing a dual -> stationarity residual undefined
+            return None      # missing a dual -> stationarity undefined
         idx = prog.FindDecisionVariableIndices(b.variables())
         J = ExtractGradient(b.evaluator().Eval(InitializeAutoDiff(x[idx])))
         r[idx] -= J.T @ y

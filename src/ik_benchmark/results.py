@@ -40,8 +40,8 @@ class SolveRecord:
     evaluated_cost: float        # solver-blind, evaluated at q
     feasible: bool               # solver-blind: max_violation < threshold
     max_violation: float         # over non bound constraints
-    common_residual_inf: float | None
-    common_residual_2: float | None
+    common_stationarity_inf: float | None
+    common_stationarity_2: float | None
     native_optimality: float | None     # from solver
     q: np.ndarray
     time_median: float = np.nan         # headline; distribution in timings table
@@ -69,8 +69,8 @@ class SolveRecord:
             evaluated_cost=np.nan,
             feasible=False,
             max_violation=np.nan,
-            common_residual_inf=None,
-            common_residual_2=None,
+            common_stationarity_inf=None,
+            common_stationarity_2=None,
             native_optimality=native_optimality,
             q=np.full(0, np.nan) if q is None else q,
             time_median=time_median,
@@ -91,7 +91,7 @@ class JointRecord:
     upper_bound: float
     at_limit: bool
     dual: float | None
-    residual_contribution: float | None  # per-joint entry of grad f - sum J^T y
+    stationarity_contribution: float | None  # per-joint entry of grad f - sum J^T y
 
 
 @dataclass(frozen=True)
@@ -185,13 +185,13 @@ def build_solve_tables(
         idx = prog.FindDecisionVariableIndices(b.variables())
         evaluated_cost += float(np.atleast_1d(b.evaluator().Eval(x[idx]))[0])
 
-    # stationarity residual (shares the single constraints/duals list, by position)
-    residual_vec = _stationarity(prog, constraints, duals, x)
-    if residual_vec is None:
-        res_inf = res_2 = None
+    # stationarity (shares the single constraints/duals list, by position)
+    stationarity_vec = _stationarity(prog, constraints, duals, x)
+    if stationarity_vec is None:
+        stationarity_inf = stationarity_2 = None
     else:
-        res_inf = float(np.max(np.abs(residual_vec)))
-        res_2 = float(np.linalg.norm(residual_vec))
+        stationarity_inf = float(np.max(np.abs(stationarity_vec)))
+        stationarity_2 = float(np.linalg.norm(stationarity_vec))
 
     # constraint rows (general = non-bound); bound rows handled in joints table
     constraint_records = []
@@ -223,7 +223,7 @@ def build_solve_tables(
                 dual=(float(y[row]) if y is not None else None),
             ))
 
-    # joints table: q, joint-limit bounds, bound dual, per-joint residual contribution
+    # joints table: q, joint-limit bounds, bound dual, per-joint stationarity contribution
     lower, upper, bound_dual = _joint_bounds_and_duals(prog, constraints, duals)
     variables = prog.decision_variables()
     joint_records = []
@@ -238,8 +238,8 @@ def build_solve_tables(
             at_limit=at_limit,
             dual=(float(bound_dual[i]) if bound_dual is not None
                   and np.isfinite(bound_dual[i]) else None),
-            residual_contribution=(float(residual_vec[i])
-                                   if residual_vec is not None else None),
+            stationarity_contribution=(float(stationarity_vec[i])
+                                   if stationarity_vec is not None else None),
         ))
 
     feasible = max_violation < feasibility_threshold
@@ -252,7 +252,7 @@ def build_solve_tables(
         optimal_cost=float(result.get_optimal_cost()),
         evaluated_cost=evaluated_cost, feasible=feasible,
         max_violation=max_violation,
-        common_residual_inf=res_inf, common_residual_2=res_2,
+        common_stationarity_inf=stationarity_inf, common_stationarity_2=stationarity_2,
         native_optimality=native_optimality,
         q=x,
         time_median=time_median,

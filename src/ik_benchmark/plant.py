@@ -27,10 +27,10 @@ def build_plant(time_step, box_params):
 
     Returns:
         (plant, plant_context, gripper_frame, q0)
-            plant : MultibodyPlant[float], finalized
-            plant_context : plant's sub-context from default diagram context
-            gripper_frame : the WSG body frame (frameB for IK constraints)
-            q0 : np.ndarray, the nominal joint pos read from the default context
+            plant: MultibodyPlant[float], finalized
+            plant_context: plant's sub-context from default diagram context
+            gripper_frame: the WSG body frame (frameB for IK constraints)
+            q0: np.ndarray, the nominal joint pos read from the default context
     """
     builder = DiagramBuilder()
     plant, scene_graph = AddMultibodyPlantSceneGraph(builder, time_step=time_step)

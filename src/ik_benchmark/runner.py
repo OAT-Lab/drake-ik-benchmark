@@ -69,8 +69,7 @@ def run_one(
     """Solve one prog with one solver under controlled conditions.
 
     Returns
-    -------
-    SolveTables
+        SolveTables
     """
     solver_name = solver.solver_id().name()
     sid = solver.solver_id()

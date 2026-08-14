@@ -32,11 +32,10 @@ _IPOPT_DUAL_RE = re.compile(
 
 
 def get_candidate_solvers(prog):
-    """Return solver instances that are both available and capable of `prog`.
+    """Return solver instances that are available and capable
 
-    Returns
-    -------
-    list[SolverInterface]
+    Returns:
+        list[SolverInterface]: list of solvers
     """
     solver_ids = GetAvailableSolvers(GetProgramType(prog))
     return [MakeSolver(solver_id) for solver_id in solver_ids]
@@ -70,8 +69,7 @@ def build_shared_options(solver_id, solver_name, cfg):
 def quiet_options(solver_name, base_options=None):
     """Return SolverOptions with every print path disabled.
 
-    Used by the timed pass.  Numerics are unaffected -- only I/O changes -- so
-    the solve this measures is the same solve the recording pass records.
+    Used by the timed pass. Print files take longer.
     """
     opts = base_options or SolverOptions()
 
@@ -79,16 +77,12 @@ def quiet_options(solver_name, base_options=None):
         sid = _ipopt_id()
         opts.SetOption(sid, "print_level", 0)  # console off (default is 5!)
         opts.SetOption(sid, "sb", "yes")       # suppress the startup banner
-    # SNOPT prints only to kPrintFileName; leaving it unset means no file and
-    # nothing on the console.
-    # NLopt does not print at all.
-
     return opts
 
 
 def native_optimality_options(solver_name, base_options=None):
     """Return (SolverOptions, print_file_path) that make the solver write its
-    native optimality line to a file WITHOUT flooding the console.
+    native optimality line to a file.
     """
     if solver_name == "NLopt":
         return (base_options or SolverOptions()), None

@@ -1,12 +1,11 @@
 """
 Scenario generation.
 
-The Scenario describes an IK problem
+Scenario for ik problem:
     (target pose, fixed initial guess, metadata)
-Provides the Scenario dataclass and seeded generators for both 
-joint-space sampling and task-space sampling. 
+Provides the Scenario dataclass and seeded generators for joint-space sampling and task-space sampling. 
 
-All randomness flows through one seed for reproducibility.
+All randomness through base seed for reproducibility.
 """
 
 from __future__ import annotations
@@ -51,8 +50,8 @@ def _sample_joint_space(plant, plant_context, gripper_frame, lower, upper, rng):
     return X_WG.translation(), X_WG.rotation().matrix()
 
 
-def _sample_cone_orientation(rng, max_tilt_rad):
-    """random orientation: nominal downward grasp tilted within cone
+def _sample_orientation(rng, max_tilt_rad):
+    """random orientation: nominal downward grasp tilted within max tilt
 
     max_tilt_rad = 0 gives exact nominal orientation
     """
@@ -68,7 +67,7 @@ def _sample_cone_orientation(rng, max_tilt_rad):
 
 def _sample_task_space(rng, position_min, position_max, max_tilt_rad):
     position = rng.uniform(position_min, position_max)
-    orientation = _sample_cone_orientation(rng, max_tilt_rad)
+    orientation = _sample_orientation(rng, max_tilt_rad)
     return position, orientation
 
 
@@ -114,7 +113,7 @@ def generate_scenarios(
 
     pos_min = np.asarray(task_space_params["position_min"], dtype=float)
     pos_max = np.asarray(task_space_params["position_max"], dtype=float)
-    cone = float(task_space_params["max_tilt_rad"])
+    max_tilt = float(task_space_params["max_tilt_rad"])
 
     seed_seq = np.random.SeedSequence(base_seed) # generates n random seeds from base seed
     children = seed_seq.spawn(n)
@@ -127,7 +126,7 @@ def generate_scenarios(
                 plant, plant_context, gripper_frame, lower, upper, rng
             )
         else:
-            position, orientation = _sample_task_space(rng, pos_min, pos_max, cone)
+            position, orientation = _sample_task_space(rng, pos_min, pos_max, max_tilt)
 
         scenarios.append(Scenario(
             id=i,
