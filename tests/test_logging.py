@@ -90,6 +90,18 @@ def test_configure_logging_is_idempotent():
     assert stream.getvalue().count("once") == 1
 
 
+def test_configure_logging_captures_package_child_loggers():
+    stream = io.StringIO()
+    configure_logging(level="INFO", stream=stream)
+    logger = logging.getLogger("ik_benchmark.runner")
+
+    logger.info("child module log")
+
+    output = stream.getvalue()
+    assert "ik_benchmark.runner" in output
+    assert "child module log" in output
+
+
 def test_configure_logging_rejects_invalid_level():
     with pytest.raises(ValueError, match="log level"):
         configure_logging(level="loud")
@@ -131,6 +143,31 @@ def test_resolve_log_file_keeps_absolute_path(tmp_path):
     log_file = tmp_path / "custom.log"
 
     assert resolve_log_file(log_file, tmp_path / "run") == log_file
+
+
+def test_setup_benchmark_run_configures_log_file_under_run_dir(tmp_path):
+    from scripts.run_benchmark import setup_benchmark_run
+
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "logging:",
+                "  level: INFO",
+                "  file: benchmark.log",
+                "  mode: w",
+                "  quiet: true",
+            ]
+        )
+    )
+
+    cfg, run_dir = setup_benchmark_run(config_path=config_path, out_dir=tmp_path)
+    log_file = run_dir / "benchmark.log"
+
+    assert cfg["logging"]["file"] == "benchmark.log"
+    assert run_dir.parent == tmp_path / "runs"
+    assert log_file.is_file()
+    assert "benchmark run configured" in log_file.read_text()
 
 
 @pytest.fixture(autouse=True)
