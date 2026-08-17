@@ -7,8 +7,8 @@ logging:
   quiet: false
 
 # benchmark
-seeds: [42]
-orientation_tols: [1.0e-3]
+seeds: [2, 9, 42] 
+orientation_tols: [0.0, 1e-4, 1e-3, 1e-2]
 n_per_cell: 640
 
 method_mix:
@@ -42,7 +42,6 @@ nlopt:
 # recorded per (scenario, solver):
 # q, objective, constraint values c(x) vs bounds, q vs joint limits
 compare:
-  q_same_tol: 1.0e-3
   feasibility_threshold: 1.0e-4
 
 timing:
