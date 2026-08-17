@@ -7,9 +7,9 @@ logging:
   quiet: false
 
 # benchmark
-seeds: [2, 9, 42] 
-orientation_tols: [0.0, 1e-4, 1e-3, 1e-2]
-n_per_cell: 640
+seeds: [2, 9, 42]                         # 3 for seed robustness
+orientation_tols: [0.0, 1e-4, 1e-3, 1e-2] 
+n_per_cell: 640 
 
 method_mix:
   joint_space: 0.5
@@ -17,12 +17,12 @@ method_mix:
 
 time_step: 0.001
 box:
-  size: [0.1, 0.1, 1.0]
+  size: [0.1, 0.1, 1.0]       # matches mit textbook
   position: [0.25, 0.0, 0.5]
 
 task_space:
-  position_min: [0.3, -0.3, 0.2]
-  position_max: [0.6, 0.3, 0.6]
+  position_min: [-1.31, -1.31, 0.0] # size computed from gripper z pos
+  position_max: [1.31, 1.31, 1.31]
   max_tilt_rad: 0.5
 
 minimum_distance:
