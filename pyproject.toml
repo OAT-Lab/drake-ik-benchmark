@@ -3,7 +3,7 @@ name = "drake-ik-benchmark"
 version = "0.0.1"
 description = "A controlled benchmark of Drake's nonlinear solvers on iiwa7 + WSG inverse kinematics."
 readme = "README.md"
-requires-python = ">=3.13" 
+requires-python = ">=3.13,<3.14"
 
 dependencies = [
     # others ~=: stable behavior, each platform resolves to an installable wheel
@@ -13,13 +13,13 @@ dependencies = [
     "pyyaml~=6.0",     # config loading
     "drake==1.50.0",
     "manipulation==2025.10.20",
-    "ipython",
-    "ipykernel",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest~=8.0",
+    "ipython",
+    "ipykernel",
 ]
 
 [build-system]
