@@ -68,18 +68,30 @@ def setup_benchmark_run(
 
 
 def _write_provenance(run_dir, cfg):
+    import platform, socket
     try:
-        from importlib.metadata import version
-        drake_version = version("drake")
-    except Exception:
-        drake_version = "source build (no dist metadata)"
-    (run_dir / "provenance.txt").write_text(
-        f"pydrake: {pydrake.__file__}\n"
-        f"version: {drake_version}\n"
-        f"run: {datetime.now().isoformat()}\n"
-    )
-    with (run_dir / "config.yaml").open("w") as f:
-        yaml.safe_dump(cfg, f, sort_keys=False)
+        try:
+            from importlib.metadata import version
+            drake_version = version("drake")
+        except Exception:
+            drake_version = "unknown"
+        (run_dir / "provenance.txt").write_text(
+            f"host: {socket.gethostname()}\n"
+            f"platform: {platform.platform()}\n"
+            f"machine: {platform.machine()}\n"
+            f"python: {platform.python_version()}\n"
+            f"pydrake: {pydrake.__file__}\n"
+            f"drake_version: {drake_version}\n"
+            f"run: {datetime.now().isoformat()}\n"
+        )
+    except Exception as e:
+        logger.warning("provenance write failed (continuing): %s", e)
+
+    try:
+        with (run_dir / "config.yaml").open("w") as f:
+            yaml.safe_dump(cfg, f, sort_keys=False)
+    except Exception as e:
+        logger.warning("config dump failed (continuing): %s", e)
 
 
 def run_benchmark(cfg: dict, run_dir: Path) -> None:
