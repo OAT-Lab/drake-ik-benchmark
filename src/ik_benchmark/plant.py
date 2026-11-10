@@ -11,11 +11,25 @@ from pydrake.geometry import Box
 from pydrake.math import RigidTransform
 from pydrake.multibody.plant import AddMultibodyPlantSceneGraph
 from pydrake.systems.framework import DiagramBuilder
+from pydrake.geometry import Box, Mesh, Role
+from pydrake.multibody.plant import AddMultibodyPlantSceneGraph, CoulombFriction
 
 from manipulation.scenarios import AddIiwa, AddShape, AddWsg
 
+def _add_mesh_collision(plant, scene_graph, model):
+    inspector = scene_graph.model_inspector()
+    for body_index in plant.GetBodyIndices(model):
+        body = plant.get_body(body_index)
+        frame_id = plant.GetBodyFrameIdOrThrow(body_index)
+        for geometry_id in inspector.GetGeometries(frame_id, Role.kIllustration):
+            shape = inspector.GetShape(geometry_id)
+            if isinstance(shape, Mesh):
+                plant.RegisterCollisionGeometry(
+                    body, inspector.GetPoseInFrame(geometry_id), shape,
+                    f"{body.name()}_mesh_collision", CoulombFriction(),
+                )
 
-def build_plant(time_step, box_params):
+def build_plant(time_step, box_params, collision_model="with_box_collision"):
     """
     build, populate, finalize the iiwa7 + WSG + box plant.
 
@@ -35,7 +49,11 @@ def build_plant(time_step, box_params):
     builder = DiagramBuilder()
     plant, scene_graph = AddMultibodyPlantSceneGraph(builder, time_step=time_step)
 
-    iiwa = AddIiwa(plant, "with_box_collision")
+    if collision_model == "mesh":
+        iiwa = AddIiwa(plant, "no_collision")
+        _add_mesh_collision(plant, scene_graph, iiwa)
+    else:
+        iiwa = AddIiwa(plant, collision_model)
     wsg = AddWsg(plant, iiwa, welded=True)
 
     size = np.asarray(box_params["size"], dtype=float)
